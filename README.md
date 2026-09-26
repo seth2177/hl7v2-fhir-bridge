@@ -80,8 +80,11 @@ python -m v2fhir send samples/omi_o23_new_stat.hl7      # terminal 3: send a fil
 ```
 
 `python run_demo.py --fhir-url http://localhost:8080/fhir` sends the same traffic to a real server instead, e.g.
-`docker run -p 8080:8080 hapiproject/hapi:latest`. The requests follow the R4 spec, but so far only the mock has
-executed them (see *Scope and safety*).
+`docker run -p 8080:8080 hapiproject/hapi:latest`. I ran it against HAPI FHIR 8.12 (R4): the demo passes its own
+end-state check, a replay after a restart creates nothing and leaves the corrected report corrected, and the 404,
+412 and escaping cases behave as they do on the mock. `HAPI_URL=http://localhost:8080/fhir python -m pytest
+tests/test_hapi.py` repeats that against an empty server. The one visible difference: HAPI answers `200 OK` for both
+an update and a match, so the demo shows `=` where the mock shows `~`.
 
 ## What it handles, and why
 
@@ -171,8 +174,8 @@ patients before writing (stale messages, number conflicts, wrong patient, merges
 need the FHIR server (the directory sink alone can't know server state). The bridge does its own FHIR work one
 message at a time, so its connections can't race each other, but another system writing the same resources at the
 same moment can, and so can concurrent conditional creates on some servers. A40 writes both patient records rather
-than calling a server merge operation. The requests are written to the R4 spec and executed by the mock in the
-tests; they have not yet been run against HAPI or another production server.
+than calling a server merge operation. The requests have run against the mock and HAPI FHIR 8.12, not yet
+against a vendor server (Azure, Google, Epic).
 
 **Security.** The MLLP listener has **no TLS and no authentication**, like most MLLP in hospitals. It binds to
 127.0.0.1 by default and belongs on a segmented interface network. To add TLS, pass an `ssl.SSLContext`
