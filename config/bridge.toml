@@ -1,0 +1,37 @@
+# hl7v2-fhir-bridge configuration. Every value here is synthetic / example.org.
+
+[listener]
+host = "127.0.0.1"          # bind address. There is no TLS or auth on MLLP: keep it on a trusted segment (see README)
+port = 2575                 # the IANA port for HL7 over MLLP
+max_message_bytes = 10485760
+idle_timeout_seconds = 300
+
+[hl7]
+accepted_versions = ["2.3", "2.3.1", "2.4", "2.5", "2.5.1"]
+default_charset = "utf-8"                 # when MSH-18 is empty ...
+fallback_charsets = ["cp1252", "latin-1"] # ... and the bytes are not UTF-8
+unsupported_messages = "ack"              # ADT^A03 etc: "ack" = AA + warning, "reject" = AR
+dedupe_cache_size = 10000
+receiving_application = "V2FHIR"
+receiving_facility = "BRIDGE"
+
+[output]
+out_dir = "data/bundles"
+fhir_base_url = ""          # e.g. "http://localhost:8080/fhir" (HAPI); empty = files only
+fhir_timeout_seconds = 15
+fhir_retries = 2
+validate = true
+
+[mapping]
+default_timezone = "America/Chicago"      # v2 timestamps without an offset are local time here
+identifier_system_base = "http://example.org/fhir/sid/"
+code_system_base = "http://example.org/fhir/CodeSystem/"
+mrn_authorities = ["SYNTH_HOSP"]          # PID-3 repetitions from this authority are the MRN
+default_assigning_authority = "SYNTH_HOSP"
+
+[mapping.assigning_authorities]
+SYNTH_HOSP = "http://example.org/fhir/sid/synth-hosp"
+SYNTH_PRV = "http://example.org/fhir/sid/synth-provider"
+SYNTH_RIS = "http://example.org/fhir/sid/synth-ris"
+SYNTH_HIS = "http://example.org/fhir/sid/synth-his"
+NPI = "http://hl7.org/fhir/sid/us-npi"

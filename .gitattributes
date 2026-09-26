@@ -1,0 +1,2 @@
+# Sample HL7 files are byte-exact test fixtures (one is deliberately Latin-1): never convert line endings.
+*.hl7 -text

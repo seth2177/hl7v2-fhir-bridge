@@ -1,0 +1,10 @@
+data/
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+ci_demo/
+.ruff_cache/
+# Real interface traffic never enters the repo
+*.local.hl7
+real_feeds/
