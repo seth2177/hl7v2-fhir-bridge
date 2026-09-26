@@ -111,7 +111,7 @@ executed them (see *Scope and safety*).
 | Huge message | 2 MB reports pass in linear time; above `max_message_bytes` only 4 KB are kept and an AR carries the right control id | `mllp.py` |
 | A training or test feed (MSH-11 T or D) pointed at production | AR 202, never written; `accepted_processing_ids` says which ids this bridge takes | `bridge.py` |
 | Unsupported events (A03, SIU…) blocking the sender's queue | AA + warning by default, AR if configured | `bridge.py` |
-| Generated FHIR that is subtly wrong | every bundle validated (fhir.resources + required value sets) before it leaves; invalid → AE, never sent | `validate.py` |
+| Generated FHIR that is subtly wrong | every bundle validated before it leaves: fhir.resources models, required value sets, and the invariants this mapper could break (per-1, prr-1, bdl-7, no empty elements, 1 MB strings); invalid → AE, never sent. Other FHIR invariants and profiles are not checked | `validate.py` |
 | FHIR server down or refusing | down (connection errors, 5xx): retried with backoff, then AR, which v2.5.1 2.9.2.2 defines as "system down, resend later" (`transient_failure_ack = "AE"` for engines that only queue on AE). Refused (4xx): AE, not retried. Every ACK leaves within `ack_deadline_seconds` (default 25 s) | `bridge.py`, `sink.py` |
 | MSH-10 used in a file name | sanitised: `../../etc/passwd` is data | `sink.py` |
 | "Which message wrote this?" | `meta.source` on every version (the message that last created or replaced it) plus one Provenance per message (what it asserted, MSH-10, sender, Z-segments) | `mapping/provenance.py` |
@@ -127,7 +127,7 @@ v2fhir/          the bridge
   mapping/       v2 -> FHIR: tables.py (every code map), datatypes, patient/encounter, orders, results, provenance
   mllp.py        frame decoder, asyncio listener, client
   bridge.py      parse -> dedupe -> map -> validate -> sink -> ACK; never raises
-  validate.py    fhir.resources + required-binding checks
+  validate.py    fhir.resources, required bindings, and the invariants the mapper could break
   sink.py        bundle directory and FHIR transaction POST (httpx)
 mock_fhir/       in-memory FHIR server that executes transactions (conditional create/update/patch, OR search)
 tools/ris_sim.py synthetic RIS and reporting system
@@ -141,8 +141,9 @@ run_demo.py      the whole workflow in one command
 
 - 180 tests run in CI on Linux and Windows, Python 3.11 and 3.12, plus `ruff`. The demo runs too, and checks its
   own end state.
-- Every bundle the bridge produces is validated against the FHIR models (`fhir.resources` 8.3, R4B classes) and
-  against the required value sets the models don't enforce. The tests validate every sample and every demo
+- Every bundle the bridge produces is validated against the FHIR models (`fhir.resources` 8.3, R4B classes),
+  against the required value sets the models don't enforce, and against the few FHIR invariants this mapper could
+  break. It is not full conformance validation: that needs the HL7 validator or a server's `$validate`. The tests validate every sample and every demo
   message.
 - Idempotency is tested against a server that really executes the transaction: conditional create, update and
   patch, reference rewriting, all-or-nothing rollback, 404/412.
