@@ -60,7 +60,10 @@ class FhirSink:
         self.base_url = base_url.rstrip("/")
         self.retries = retries
         self.timeout = timeout
-        self._client = httpx.Client(timeout=timeout, transport=transport,
+        # A FHIR server on this machine is never reached through a proxy. httpx reads the system proxy (on Windows
+        # from the registry) but not the Windows "<local>" bypass, so without this the demo's traffic went to it.
+        loopback = httpx.URL(self.base_url).host in ("127.0.0.1", "localhost", "::1")
+        self._client = httpx.Client(timeout=timeout, transport=transport, trust_env=not loopback,
                                     headers={"Content-Type": "application/fhir+json", "Accept": "application/fhir+json"})
 
     def close(self) -> None:
