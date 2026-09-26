@@ -97,6 +97,8 @@ def status_from_orc(orc: Segment, ctx: Ctx) -> str:
     if control in T.ORDER_CONTROL_DEFERS_TO_ORC5 and order_status:
         if order_status in T.ORDER_STATUS_0038:
             return T.ORDER_STATUS_0038[order_status]
+        if T.ORDER_CONTROL_0119[control] is None:
+            raise MappingError(f"ORC-1 is {control} but ORC-5 order status {order_status!r} is not in table 0038", TABLE_VALUE_NOT_FOUND, orc.loc(5))
         ctx.warn(f"ORC-5 order status {order_status!r} is not mapped; using ORC-1", orc.loc(5))
     status = T.ORDER_CONTROL_0119[control]
     if status is None:
