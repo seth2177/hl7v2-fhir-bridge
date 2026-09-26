@@ -143,7 +143,8 @@ class Bridge:
         try:
             if self.fhir_sink:
                 extra += self._reconcile(bundle)
-            path = self.dir_sink.write(bundle, safe_name(msg.sending_app, msg.control_id)) if self.dir_sink else None
+            # The content hash (MSH-7 ignored) keeps an identical resend on its own file but gives a reused control id a new one.
+            path = self.dir_sink.write(bundle, f"{safe_name(msg.sending_app, msg.sending_facility, msg.control_id)}-{digest[:12]}") if self.dir_sink else None
             if self.fhir_sink:
                 entries = self.fhir_sink.post(bundle)
         except HL7Error as e:
