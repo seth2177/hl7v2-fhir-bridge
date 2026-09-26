@@ -180,3 +180,12 @@ def test_validator_catches_the_invariants_the_models_skip(cfg, breakage, expecte
 
 def _res(bundle: dict, rtype: str) -> dict:
     return next(e["resource"] for e in bundle["entry"] if e["resource"]["resourceType"] == rtype)
+
+
+
+def test_nak_msa2_stays_one_field_when_msh2_is_unusable(cfg):
+    """With a bad MSH-2 the NAK falls back to | as its separator, but MSH-10 was split on the sender's own ('#'),
+    so a '|' in it spilled into MSA-3. It is now escaped."""
+    res = Bridge(cfg).handle(b"MSH#^^#APP#FAC#RCV#RF#20260915##ADT^A04#CTL|X#P#2.5\r")
+    msa = [s for s in res.ack.split("\r") if s.startswith("MSA")][0].split("|")
+    assert res.ack_code == "AR" and msa[2] == "CTL\\F\\X"
