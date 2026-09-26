@@ -4,7 +4,9 @@ R4 Provenance has no identifier to search on, so it is written with PUT to an id
 sending application + facility + MSH-10: replaying the same message rewrites the same Provenance
 instead of adding another. Every resource also carries meta.source = urn:hl7v2:<app>:<facility>#<MSH-10>.
 
-Z-segments have no FHIR home, so each one is kept verbatim on the Provenance (extension below):
+Z-segments and IPC (the OMI imaging procedure control segment: accession, requested procedure, Study
+Instance UID in IPC-3) have no FHIR home before a result exists, so each one is kept verbatim on the
+Provenance (extension below):
 site-specific data is never silently thrown away, and it stays next to the resources it came with.
 """
 from __future__ import annotations
@@ -22,7 +24,7 @@ def add_provenance(msg: Message, ctx: Ctx) -> None:
     if not targets:
         return
     prov: dict = {"resourceType": "Provenance", "id": ctx.provenance_id, "meta": ctx.meta()}
-    z = [str(s) for s in msg.z_segments]
+    z = [str(s) for s in msg.segments if s.name.startswith("Z") or s.name == "IPC"]
     if z:
         prov["extension"] = [{"url": Z_SEGMENT_EXTENSION, "valueString": text} for text in z]
     prov["target"] = targets

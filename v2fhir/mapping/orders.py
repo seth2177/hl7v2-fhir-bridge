@@ -12,8 +12,8 @@ Which order is it? (the conditional match)
   first and NAKs with 205 (bridge._reconcile). The bundle-internal key is placer -> filler -> accession.
 
 Accession number: IHE Scheduled Workflow carries it in OBR-18 for ORM^O01 and in IPC-1 for OMI^O23.
-The Study Instance UID is ZDS-1 (ORM) or IPC-3 (OMI); it is kept in provenance with the other Z data
-and becomes an ImagingStudy when a result arrives.
+The Study Instance UID is ZDS-1 (ORM) or IPC-3 (OMI); both segments are kept verbatim on the Provenance.
+An ImagingStudy is created only when an ORU for a performed exam carries ZDS-1.
 
 How it is written (see mapping/bundle.py):
   NW                             create-if-absent. A replayed NW, or an NW arriving after its result

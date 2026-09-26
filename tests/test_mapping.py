@@ -274,3 +274,11 @@ def test_second_group_with_the_same_order_number_is_not_dropped_silently(cfg):
     conv = convert(parse(msg + orc + "\r" + obr2 + "\r"), cfg)
     assert len(resources(conv.bundle, "ServiceRequest")) == 1
     assert any("second ORC/OBR group for order ORD1001" in str(w) for w in conv.warnings)
+
+
+def test_omi_ipc_segment_with_the_study_uid_is_kept_on_the_provenance(cfg):
+    """IPC-3 (Study Instance UID) has no ServiceRequest element; it must not vanish."""
+    raw = sample_bytes("omi_o23_new_stat.hl7")
+    ipc = next(seg for seg in raw.decode("utf-8").replace("\n", "\r").split("\r") if seg.startswith("IPC"))
+    prov = resources(to_bundle(raw, cfg), "Provenance")[0]
+    assert ipc.split("|")[3].split("^")[0] in [x["valueString"].split("|")[3].split("^")[0] for x in prov["extension"] if x["valueString"].startswith("IPC")]
