@@ -69,6 +69,11 @@ class TransactionBuilder:
     def has(self, resource_type: str, ident: dict) -> bool:
         return f"{resource_type}|{ident.get('system')}|{ident['value']}" in self._by_key
 
+    def get(self, resource_type: str, ident: dict) -> dict | None:
+        """The resource already in this bundle under that key, if any."""
+        e = self._by_key.get(f"{resource_type}|{ident.get('system')}|{ident['value']}")
+        return e.resource if e else None
+
     def url_for(self, resource_type: str, ident: dict) -> str:
         """The fullUrl a resource keyed on `ident` has (or will have) in this bundle."""
         return self._full_url(f"{resource_type}|{ident.get('system')}|{ident['value']}")

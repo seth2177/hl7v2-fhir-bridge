@@ -181,7 +181,7 @@ def xcn(rep: Rep, ctx: Ctx) -> tuple[dict | None, dict | None]:
         t = identifier_type(rep.get(13))
         if t:
             ident["type"] = t
-        ident["system"] = hd_system(rep.get(9, 1), rep.get(9, 2), rep.get(9, 3), ctx) or ctx.cfg.identifier_system_base + "provider"
+        ident["system"] = hd_system(rep.get(9, 1), rep.get(9, 2), rep.get(9, 3), ctx) or _provider_fallback(value, rep.get(13), ctx)
         ident["value"] = value
     return ident, name
 
@@ -193,9 +193,19 @@ def cnn_in_ndl(rep: Rep, ctx: Ctx) -> tuple[dict | None, dict | None]:
     value = rep.get(1, 1)
     ident = None
     if value:
-        ident = {"system": hd_system(rep.get(1, 9), rep.get(1, 10), rep.get(1, 11), ctx) or ctx.cfg.identifier_system_base + "provider",
+        ident = {"system": hd_system(rep.get(1, 9), rep.get(1, 10), rep.get(1, 11), ctx) or _provider_fallback(value, None, ctx),
                  "value": value}
     return ident, name
+
+
+def _provider_fallback(value: str, id_type: str | None, ctx: Ctx) -> str:
+    """A provider id with no assigning authority: an NPI is the US NPI system; anything else shares one site-wide
+    system, which only works if every sender numbers providers the same way, so say so."""
+    if (id_type or "").upper() == "NPI":
+        return ctx.cfg.assigning_authorities.get("NPI", "http://hl7.org/fhir/sid/us-npi")
+    system = ctx.cfg.identifier_system_base + "provider"
+    ctx.warn(f"provider id {value!r} has no assigning authority; matched on the site-wide {system}")
+    return system
 
 
 def name_text(name: dict | None) -> str:
