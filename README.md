@@ -97,6 +97,7 @@ executed them (see *Scope and safety*).
 | Cancel for an order the server never saw | ORC-only cancel: AE 204 (unknown key). Full cancel: recorded as revoked, AA with warning | `bridge.py` |
 | ORC-only cancel wiping the order | status-only messages become a FHIRPath PATCH of `status`, not a PUT | `mapping/orders.py` |
 | An old result overwriting a newer report (a late preliminary after the final, a resent final after the correction, a queued cancel after the final) | reads the current report first; a lower status never replaces a higher one, and at equal status the older OBR-22 loses; the stale entry is dropped with a warning | `bridge.py` |
+| A merge erased by the next A08, or a feed that hasn't seen the merge re-activating the old MRN | ADT reads the current Patient first: links are kept and a merged-away record stays retired (warning) | `bridge.py` |
 | An old status message re-opening a finished order (a resent SC after the cancel) | reads the current order first; completed and revoked are terminal, so the late status is dropped with a warning | `bridge.py` |
 | Timestamps without a time zone | local time in `default_timezone`, DST-correct, with a warning; no zone configured → date only, never a made-up offset | `mapping/datatypes.py` |
 | Partial-precision timestamps (`2026`, `202609151430`) | mapped at their real precision (seconds padded only where FHIR requires them) | `mapping/datatypes.py` |

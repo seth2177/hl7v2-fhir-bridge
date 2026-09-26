@@ -113,3 +113,37 @@ def test_mock_implements_the_no_system_token_form():
          "request": {"method": "POST", "url": "Patient"}}]})
     assert len(s.search("Patient", [("identifier", "|12345")])) == 1
     assert len(s.search("Patient", [("identifier", "12345")])) == 2
+
+
+# ---- an A40 merge must survive routine ADT traffic ---------------------------------------------------------
+def _patient(store, mrn):
+    found = [p for p in store.all("Patient") if any(i.get("value") == mrn for i in p.get("identifier", []))]
+    assert len(found) == 1, f"expected one Patient with MRN {mrn}, got {len(found)}"
+    return found[0]
+
+
+@pytest.fixture
+def merged(bridge):
+    samples = ROOT / "samples"
+    assert bridge.handle((samples / "adt_a04_register.hl7").read_bytes()).ack_code == "AA"
+    assert bridge.handle((samples / "adt_a40_merge.hl7").read_bytes()).ack_code == "AA"     # SYN100999 -> SYN100234
+    return bridge, bridge.server.store
+
+
+def test_survivor_keeps_its_merge_link_after_a_routine_a08(merged):
+    """PID carries no links, so a plain PUT from the next A08 erased the survivor's 'replaces' link."""
+    bridge, store = merged
+    retired_id = _patient(store, "SYN100999")["id"]
+    assert bridge.handle((ROOT / "samples" / "adt_a08_name_change.hl7").read_bytes()).ack_code == "AA"
+    assert {"other": {"reference": f"Patient/{retired_id}"}, "type": "replaces"} in _patient(store, "SYN100234").get("link", [])
+
+
+def test_late_adt_for_the_merged_away_mrn_does_not_reactivate_it(merged):
+    """R4 Patient.active: updates for an inactive record linked to an active one belong on the other record."""
+    bridge, store = merged
+    survivor_id = _patient(store, "SYN100234")["id"]
+    late = (ROOT / "samples" / "adt_a08_name_change.hl7").read_bytes().replace(b"SYN100234", b"SYN100999").replace(b"RIS00004", b"OTH00001")
+    res = bridge.handle(late)
+    retired = _patient(store, "SYN100999")
+    assert retired["active"] is False and {"other": {"reference": f"Patient/{survivor_id}"}, "type": "replaced-by"} in retired["link"]
+    assert res.ack_code == "AA" and any("merged into" in str(i) for i in res.issues)

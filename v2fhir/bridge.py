@@ -143,6 +143,8 @@ class Bridge:
         try:
             if self.fhir_sink:
                 extra += self._reconcile(bundle)
+                if msg.message_type.upper() == "ADT" and msg.trigger.upper() != "A40":
+                    extra += self._keep_merges(bundle)
             # The content hash (MSH-7 ignored) keeps an identical resend on its own file but gives a reused control id a new one.
             path = self.dir_sink.write(bundle, f"{safe_name(msg.sending_app, msg.sending_facility, msg.control_id)}-{digest[:12]}") if self.dir_sink else None
             if self.fhir_sink:
@@ -210,6 +212,28 @@ class Bridge:
                 continue
             if req["method"] != "PATCH":
                 _merge_numbers(e, cur, query)
+        return issues
+
+    def _keep_merges(self, bundle: dict) -> list[Issue]:
+        """An A40 leaves link entries on both patients, but PID carries no links, so the next A08's PUT would
+        erase them, and an A08 from a feed that still uses the merged-away MRN would re-activate that record.
+        Read the current Patient first: keep its links, and don't touch a record that was merged away."""
+        issues = []
+        for e in bundle["entry"]:
+            res, req = e["resource"], e["request"]
+            if res.get("resourceType") != "Patient" or req["method"] != "PUT" or "?" not in req["url"]:
+                continue
+            current = self.fhir_sink.search(req["url"])
+            if len(current) != 1:
+                continue
+            cur = current[0]
+            merged_into = [ln for ln in cur.get("link", []) if ln.get("type") == "replaced-by"]
+            if cur.get("active") is False and merged_into:
+                e["request"] = {"method": "POST", "url": "Patient", "ifNoneExist": req["url"].split("?", 1)[1]}
+                issues.append(Issue("0", f"patient was merged into {merged_into[0].get('other', {}).get('reference')}; "
+                                         "demographics not applied", Location("PID", 1, 3), "W"))
+            elif cur.get("link") and not res.get("link"):
+                res["link"] = cur["link"]
         return issues
 
     def _same_patient(self, bundle: dict, res: dict, cur: dict) -> bool:
