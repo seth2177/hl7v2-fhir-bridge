@@ -105,7 +105,8 @@ PUT  Provenance/v2-de7b1f10…                                                 (
   would replace the order with one that has no procedure and no requester.
 * *Orders match on any of their numbers.* The HIS sends NW with a placer number, and the report comes back
   with filler + accession. `identifier=placer,filler,accession` finds the order either way. Two different
-  orders matching is a 412 and an AE, because a person has to look.
+  orders matching is a 412 and an AE, because a person has to look. So is one order whose placer, filler or
+  accession disagrees with this message's (a different order sharing one number): AE 205.
 
 ## Hop 5: validate, write, send (`v2fhir/validate.py`, `v2fhir/sink.py`)
 
