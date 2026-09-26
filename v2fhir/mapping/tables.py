@@ -20,7 +20,10 @@ DICOM_UID_SYSTEM = "urn:dicom:uid"
 SEX_0001 = {"M": "male", "F": "female", "O": "other", "U": "unknown", "A": "other", "N": "unknown"}
 
 # ---- 0200 Name type -> HumanName.use ------------------------------------------------------
-NAME_USE_0200 = {"L": "official", "D": "usual", "M": "maiden", "N": "nickname", "A": "usual", "S": "anonymous", "T": "temp"}
+# A (v2.5.1 Alias), T (Indigenous/Tribal/Community name) and the other codes the IG leaves unmatched get no use.
+# S (v2.3-2.5.1 "Coded pseudo-name to ensure anonymity") -> anonymous is a deviation: the IG leaves S unmatched.
+NAME_USE_0200 = {"L": "official", "D": "usual", "M": "maiden", "N": "nickname", "S": "anonymous",
+                 "TEMP": "temp", "NAV": "temp", "BAD": "old"}
 
 # ---- 0190 Address type -> Address.use / Address.type ------------------------------------
 ADDRESS_USE_0190 = {"H": "home", "B": "work", "O": "work", "C": "temp", "BA": "old", "M": "home"}

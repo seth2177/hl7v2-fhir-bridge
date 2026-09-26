@@ -4,7 +4,8 @@ import pytest
 from tests.conftest import resources, sample_bytes, to_bundle
 from v2fhir.convert import convert
 from v2fhir.errors import HL7Error
-from v2fhir.hl7.parser import parse_bytes
+from v2fhir.hl7.parser import parse, parse_bytes
+from v2fhir.mapping import datatypes as dt
 
 V2_0074 = "http://terminology.hl7.org/CodeSystem/v2-0074"
 
@@ -50,3 +51,16 @@ def test_local_obr24_code_is_rad_with_a_warning(cfg):
     conv = convert(parse_bytes(_oru(**{"|CT|F|": "|XR|F|"})), cfg)
     assert resources(conv.bundle, "DiagnosticReport")[0]["category"][0]["text"] == "XR"
     assert any("not in table 0074" in str(w) for w in conv.warnings)
+
+
+# ---- XPN-7 (table 0200) -> HumanName.use -------------------------------------------------------------
+def _name_use(code: str) -> str | None:
+    msg = parse(f"MSH|^~\\&|A|F|B|G|20260915080000||ADT^A04|X1|P|2.5.1\rPID|1||1^^^H^MR||REDCLOUD^CHIEF^^^^^{code}\r")
+    return dt.xpn(msg.seg("PID").rep(5)).get("use")
+
+
+@pytest.mark.parametrize("code, use", [("L", "official"), ("D", "usual"), ("M", "maiden"), ("TEMP", "temp"), ("BAD", "old"),
+                                       ("T", None), ("A", None)])
+def test_name_type_0200(code, use):
+    """T is Indigenous/Tribal/Community name (not temporary) and A is Alias (not usual): the IG leaves both unmatched."""
+    assert _name_use(code) == use
