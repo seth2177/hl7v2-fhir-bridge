@@ -159,3 +159,24 @@ def test_ack_control_ids_stay_unique_after_100000_acks(monkeypatch):
     monkeypatch.setattr(ack, "datetime", Frozen)
     ids = [ack._new_control_id() for _ in range(10)]
     assert all(len(i) == 20 for i in ids) and len(set(ids)) == 10
+
+
+
+# ---- the FHIR invariants validate.py checks on top of the models ---------------------------------------------
+@pytest.mark.parametrize("breakage, expected", [
+    (lambda b: _res(b, "Encounter").update(period={"start": "2026-09-15T10:00:00-05:00", "end": "2026-09-15T09:00:00-05:00"}), "per-1"),
+    (lambda b: _res(b, "ServiceRequest").pop("code"), "prr-1"),
+    (lambda b: b["entry"][1].update(fullUrl=b["entry"][0]["fullUrl"]), "bdl-7"),
+    (lambda b: _res(b, "Provenance").update(target=[]), "empty array"),
+    (lambda b: _res(b, "ServiceRequest").update(note=[{"text": ""}]), "empty string"),
+    (lambda b: _res(b, "ServiceRequest").update(note=[{"text": "x" * (1024 * 1024 + 1)}]), "over 1 MB"),
+])
+def test_validator_catches_the_invariants_the_models_skip(cfg, breakage, expected):
+    b = to_bundle(r.orm("NW", "V1", placer="P1", filler="F1", accession="A1", procedure=r.CT_CHEST, modality="CT"), cfg)
+    breakage(b)
+    with pytest.raises(BundleInvalid, match=expected):
+        validate_bundle(b)
+
+
+def _res(bundle: dict, rtype: str) -> dict:
+    return next(e["resource"] for e in bundle["entry"] if e["resource"]["resourceType"] == rtype)

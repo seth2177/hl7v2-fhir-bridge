@@ -7,11 +7,17 @@ Two layers:
      ServiceRequest, DiagnosticReport, ImagingStudy, Provenance, Parameters, Bundle).
   2. Required value-set bindings, which fhir.resources does not check: `gender: "bogus"` passes the
      models, so the codes this bridge emits for required bindings are checked here against the spec's lists.
+  3. The FHIR invariants this mapper could break, which fhir.resources doesn't evaluate: no empty elements
+     (ele-1, and FHIR JSON has no empty objects, arrays or strings), per-1 (Period start <= end), prr-1
+     (ServiceRequest.orderDetail needs code), bdl-7 (unique fullUrl), and the 1 MB limit on strings.
+     Every other invariant and any profile is NOT checked; that needs the HL7 validator or a server's $validate.
 """
 from __future__ import annotations
 
 from fhir.resources.R4B.bundle import Bundle
 from pydantic import ValidationError
+
+from .mapping.datatypes import period_ordered
 
 REQUIRED_BINDINGS: dict[str, dict[str, set[str]]] = {
     "Patient": {"gender": {"male", "female", "other", "unknown"}},
@@ -70,5 +76,43 @@ def validate_bundle(bundle: dict) -> None:
                 for part in p.get("part", []):
                     if part.get("name") == "value" and "valueCode" in part and part["valueCode"] not in SERVICE_REQUEST_STATUS:
                         problems.append(f"entry[{i}] PATCH value {part['valueCode']!r} is not a ServiceRequest status")
+    problems += _invariant_problems(bundle)
     if problems:
         raise BundleInvalid("; ".join(problems))
+
+
+STRING_MAX_BYTES = 1024 * 1024
+
+
+def _invariant_problems(bundle: dict) -> list[str]:
+    problems: list[str] = []
+
+    def walk(node, path: str) -> None:
+        if isinstance(node, dict):
+            if not node:
+                problems.append(f"{path}: empty object")
+            if isinstance(node.get("start"), str) and isinstance(node.get("end"), str) and path.endswith("period") \
+                    and not period_ordered(node["start"], node["end"]):
+                problems.append(f"{path}: start after end (per-1)")
+            for k, v in node.items():
+                walk(v, f"{path}.{k}")
+        elif isinstance(node, list):
+            if not node:
+                problems.append(f"{path}: empty array")
+            for i, v in enumerate(node):
+                walk(v, f"{path}[{i}]")
+        elif isinstance(node, str):
+            if not node:
+                problems.append(f"{path}: empty string")
+            elif not path.endswith(".data") and len(node.encode("utf-8")) > STRING_MAX_BYTES:
+                problems.append(f"{path}: string over 1 MB")
+
+    walk(bundle, "Bundle")
+    urls = [e.get("fullUrl") for e in bundle.get("entry", []) if e.get("fullUrl")]
+    if len(urls) != len(set(urls)):
+        problems.append("two entries share a fullUrl (bdl-7)")
+    for i, e in enumerate(bundle.get("entry", [])):
+        res = e.get("resource") or {}
+        if res.get("resourceType") == "ServiceRequest" and res.get("orderDetail") and not res.get("code"):
+            problems.append(f"entry[{i}] ServiceRequest.orderDetail without code (prr-1)")
+    return problems[:10]

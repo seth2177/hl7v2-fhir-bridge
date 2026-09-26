@@ -120,9 +120,10 @@ PUT  Provenance/v2-4fd5f894…                                                 (
 
 ## Hop 5: validate, write, send (`v2fhir/validate.py`, `v2fhir/sink.py`)
 
-The bundle is validated with `fhir.resources` (structure, cardinality, formats), plus a check of the
-required-binding codes, which the models don't enforce (`gender: "bogus"` passes them). An invalid bundle is an
-AE and is never sent.
+The bundle is validated with `fhir.resources` (structure, data types, required elements, primitive formats),
+plus two things the models don't do: the required-binding codes (`gender: "bogus"` passes the models), and the
+handful of FHIR invariants this mapper could break (per-1, prr-1, bdl-7, no empty elements, 1 MB strings). Other
+invariants and profiles are not evaluated. An invalid bundle is an AE and is never sent.
 
 It is written to `data/bundles/<sender>_<facility>_<control id>-<name hash>-<content hash>.json`: an identical
 resend overwrites its own file, and a reused control id gets a new one. The name is sanitised, because MSH-10 comes
