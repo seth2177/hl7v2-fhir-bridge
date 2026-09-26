@@ -273,4 +273,4 @@ def split_batch(text: str) -> list[str]:
 def split_batch_bytes(raw: bytes) -> list[bytes]:
     """split_batch on raw bytes. latin-1 maps every byte to one character and back, so each message's
     bytes are untouched and its own MSH-18 still decides how it is decoded."""
-    return [m.encode("latin-1") for m in split_batch(raw.decode("latin-1"))]
+    return [m.encode("latin-1") for m in split_batch(_charset.strip_bom(raw).decode("latin-1"))]

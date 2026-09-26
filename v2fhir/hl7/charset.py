@@ -53,9 +53,13 @@ CHARSETS = {
 UTF8_BOM = b"\xef\xbb\xbf"
 
 
+def strip_bom(raw: bytes) -> bytes:
+    return raw[len(UTF8_BOM):] if raw.startswith(UTF8_BOM) else raw
+
+
 def declared_charset(raw: bytes) -> str:
     """MSH-18 (first repetition), read from the bytes before decoding. '' if absent."""
-    head = first_line(raw.decode("latin-1"))
+    head = first_line(strip_bom(raw).decode("latin-1"))
     if not head.startswith("MSH") or len(head) < 5:
         return ""
     fs = head[3]
