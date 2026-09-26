@@ -166,7 +166,7 @@ Instance UID).
 | 0202 Telecom equipment | ContactPoint.system | PH phone · FX fax · CP phone + use mobile · BP pager · Internet, X.400 email · MD, TDD, TTY other |
 | 0203 Identifier type | Identifier.type | same codes in `terminology.hl7.org/CodeSystem/v2-0203` (MR, PI, VN, PLAC, FILL, ACSN…) |
 | 0004 Patient class | Encounter.class (v3 ActCode) | E EMER · I IMP · O AMB · P PRENC · R AMB · B IMP · other → NullFlavor UNK |
-| 0119 Order control | ServiceRequest.status | NW, OK, XO, XX, RL, OR active (or ORC-5 if present) · SC → ORC-5 required · CA, CR, OC, DC, DR, OD revoked · HD, OH on-hold · anything else AE 103 |
+| 0119 Order control | ServiceRequest.status | NW, OK, XO, XX, RL, OR active (or ORC-5 if present) · SC → ORC-5 required (empty → AE 101; not in table 0038 → AE 103) · CA, CR, OC, DC, DR, OD revoked · HD, OH on-hold · anything else AE 103 |
 | 0038 Order status | ServiceRequest.status | A, IP, SC active · CM completed · CA, DC, RP revoked · HD on-hold · ER entered-in-error |
 | 0123 Result status | DiagnosticReport.status | O, I, S registered · A, R partial · P preliminary · F final · **C corrected** · X cancelled · anything else (e.g. D, Y, Z) AE 103 |
 | 0027 Priority | ServiceRequest.priority | S stat · A asap · R routine · T, P urgent |

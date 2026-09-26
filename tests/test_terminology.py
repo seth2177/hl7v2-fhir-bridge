@@ -75,3 +75,13 @@ def test_pre_ct_snomed_is_not_labelled_snomed_ct(cfg, cwe, system):
     """0396 SNM (SNOMED 2nd ed.) and SNM3 (SNOMED International) codes are not SNOMED CT concept ids."""
     msg = parse(f"MSH|^~\\&|A|B|C|D|2026||ORU^R01|1|P|2.5\rOBX|1|CE|X||{cwe}\r")
     assert dt.ce(msg.seg("OBX").rep(5), Ctx(msg=msg, cfg=cfg, now=FIXED_NOW))["coding"][0]["system"] == system
+
+
+# ---- ORC-5 (table 0038) -------------------------------------------------------------------------------
+def test_sc_with_unknown_orc5_is_table_value_not_found(cfg):
+    """SC needs ORC-5; a value outside table 0038 is 103 (table value not found), not 101 (required field missing)."""
+    raw = sample_bytes("orm_o01_status_completed.hl7")
+    assert raw.count(b"||CM|") == 1
+    with pytest.raises(HL7Error) as exc:
+        convert(parse_bytes(raw.replace(b"||CM|", b"||ZZ|")), cfg)
+    assert exc.value.issue.code == "103"
