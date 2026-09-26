@@ -110,7 +110,8 @@ PUT  Provenance/v2-4fd5f894…                                                 (
 * *NW is create-if-absent.* A replayed NW changes nothing, and neither does an NW that arrives after its own
   result (ORU before ORM): it can't re-open a reported order.
 * *Status-only messages patch.* An ORC-only cancel becomes a FHIRPath Patch of `ServiceRequest.status`. A PUT
-  would replace the order with one that has no procedure and no requester.
+  would replace the order with one that has no procedure and no requester. The order's `meta.source` still names
+  the NW; the cancel is traced through its own Provenance.
 * *Orders match on any of their numbers.* The HIS sends NW with a placer number, and the report comes back
   with filler + accession. `identifier=placer,filler,accession` finds the order either way. Two different
   orders matching is a 412 and an AE, because a person has to look. So is one order whose placer, filler or

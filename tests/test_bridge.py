@@ -32,15 +32,25 @@ def test_same_orm_twice_gives_one_service_request(bridge):
     assert counts["Provenance"] == 2                        # two messages really were received
 
 
-def test_replay_after_restart_is_idempotent_including_provenance(bridge, cfg, mock_server):
-    send(bridge, r.orm("NW", "C1", **O1))
-    fresh = Bridge(cfg)                                      # new process: dedupe cache is empty
+def test_replay_after_restart_changes_no_clinical_resource(bridge, cfg, mock_server):
+    """After a restart the dedupe cache is empty, so a resend reaches the FHIR server. Every clinical resource is
+    matched or unchanged (still version 1). The Provenance is rewritten under the same id: a new version, because
+    recorded is when the bridge processed it, but still one Provenance with the same targets."""
+    msg = r.orm("NW", "C1", **O1)
+    send(bridge, msg)
+    [prov_before] = store(bridge).all("Provenance")
+    fresh = Bridge(cfg, clock=lambda: FIXED_NOW + timedelta(hours=1))
     try:
-        again = fresh.handle(r.orm("NW", "C1", **O1).encode())
+        again = fresh.handle(msg.replace("20260915083000", "20260915093000", 1).encode())   # the engine refreshed MSH-7
     finally:
         fresh.close()
+    clinical = ("Patient", "Practitioner", "Encounter", "ServiceRequest")
     assert again.ack_code == "AA" and not again.duplicate
+    assert all(e.outcome in ("matched", "unchanged") for e in again.entries if e.resource_type in clinical)
     assert store(bridge).counts() == {"Encounter": 1, "Patient": 1, "Practitioner": 1, "Provenance": 1, "ServiceRequest": 1}
+    assert all(res["meta"]["versionId"] == "1" for t in clinical for res in store(bridge).all(t))
+    [prov_after] = store(bridge).all("Provenance")
+    assert prov_after["id"] == prov_before["id"] and prov_after["target"] == prov_before["target"]
 
 
 def test_duplicate_control_id_is_deduped_but_changed_content_is_not_dropped(bridge):

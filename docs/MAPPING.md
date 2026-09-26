@@ -59,7 +59,9 @@ the references to real ids.
 | MSH-12 | version; must be in `accepted_versions` or AR 203 |
 | MSH-18 | character set (table 0211), see §5 |
 
-Every resource gets `meta.source = urn:hl7v2:<MSH-3>:<MSH-4>#<MSH-10>` (percent-encoded parts).
+Every resource gets `meta.source = urn:hl7v2:<MSH-3>:<MSH-4>#<MSH-10>` (percent-encoded parts): the message that created or
+last replaced that version. A status-only FHIRPath Patch (an ORC-only cancel) changes only `status`, so that version keeps
+the meta.source of the message that last wrote the whole order; the patching message is traced by its own Provenance.
 
 ### PID → Patient
 
@@ -238,7 +240,9 @@ charset switching) are dropped. Unknown or unterminated sequences are kept liter
 |---|---|---|
 | Report OBX | `DiagnosticReport.conclusion` + `presentedForm` (+ `conclusionCode` for coded OBX); **no Observation per OBX** | a radiology report is narrative. One Observation per text line adds resources nobody queries. Numeric OBX are out of scope (warning) |
 | OBR-25 = C | `corrected` | the most specific R4 code; `corrected` is a child of `amended` in the R4 hierarchy. One line in `tables.py` to change |
-| Message metadata | Provenance (+ `meta.source`), no MessageHeader | this is not FHIR messaging; Provenance says which message wrote which resources and survives in the server |
+| Message metadata | Provenance (+ `meta.source`), no MessageHeader | this is not FHIR messaging; Provenance survives in the server |
+| Provenance.target | every resource the message asserted: created, updated, patched, or confirmed to exist (a create-if-absent that matched) | R4 defines target as the resources the activity generated or updated, but one atomic transaction can't know in advance which conditional creates will match. For which message wrote a given version, use `meta.source` and `_history` |
+| Replay after a restart | clinical resources are matched or unchanged; the message's Provenance is rewritten under the same id as a new version, because `recorded` is when the bridge processed it | Provenance.recorded is 1..1 and means when it was recorded |
 | Z-segments | kept verbatim on Provenance | the IG does not map them; dropping site data silently is worse |
 | Matching / identity | conditional requests on identifiers, OR across order numbers, MRN choice by configured authority | the IG leaves identity to implementers; this is the part that decides whether replays duplicate |
 | Practitioner without an id | display-only reference | a name-only Practitioner would duplicate on every message |
