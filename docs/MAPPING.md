@@ -141,7 +141,7 @@ DICOM coding, and `ImagingStudy.modality` gets it properly once a study exists.
 | OBR-25 | `status` | table 0123; empty → AE 101, unknown → AE 103 |
 | OBR-32 (NDL) | `resultsInterpreter[]` | NDL component 1 is a CNN whose parts are **sub**components (`id&family&given…`) |
 | OBX (TX/FT/ST) | `presentedForm[0]` (text/plain, UTF-8, base64), `conclusion` | all text lines, in order |
-| OBX-3 = `&IMP` / `IMP` / LOINC 19005-8 | `conclusion` | the impression; if there is none, the whole text |
+| OBX-3 = `&IMP` / `IMP` / LOINC 19005-8 | `conclusion` | the impression; if there is none, the whole text. Cut to FHIR's 1 MB string limit with a warning; `presentedForm` always carries the full text |
 | OBX (CE/CWE/CNE) | `conclusionCode[]` | e.g. a Lung-RADS or BI-RADS category |
 | OBX (other types: NM, SN…) | not mapped | warning; the raw message is traceable through Provenance |
 | ZDS-1 (RP: UID^app^type^subtype) | ImagingStudy `identifier = {system: urn:dicom:uid, value: urn:oid:<UID>}` | the R4 convention for Study Instance UID; must be a valid UID (≤64, digits and dots) |

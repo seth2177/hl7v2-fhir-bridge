@@ -302,3 +302,13 @@ def test_order_detail_only_with_a_code(cfg, sample):
     assert b"71250" not in raw
     for sr in resources(to_bundle(raw, cfg), "ServiceRequest"):
         assert "orderDetail" not in sr or "code" in sr
+
+
+def test_conclusion_stays_within_the_fhir_string_limit(cfg):
+    """A FHIR string is at most 1 MB. A 2 MB report without an impression line was copied whole into
+    conclusion; presentedForm (base64Binary) is where the full text belongs."""
+    lines = ["Line %05d of a very long report without an impression section." % i for i in range(40_000)]
+    conv = convert(parse(r.oru("F", "BIG1", **O1, findings=lines, impression="")), cfg)
+    dr = resources(conv.bundle, "DiagnosticReport")[0]
+    assert len(dr["conclusion"].encode("utf-8")) <= 1024 * 1024 and dr["conclusion"].endswith("full report in presentedForm]")
+    assert base64.b64decode(dr["presentedForm"][0]["data"]).decode("utf-8").count("Line ") == len(lines)
