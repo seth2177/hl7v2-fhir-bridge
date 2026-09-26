@@ -23,7 +23,18 @@ from pathlib import Path
 
 from .config import Config
 from .convert import UnsupportedMessage, convert
-from .errors import APPLICATION_INTERNAL_ERROR, DUPLICATE_KEY_IDENTIFIER, UNKNOWN_KEY_IDENTIFIER, UNSUPPORTED_VERSION_ID, HL7Error, Issue, Location, RejectError
+from .errors import (
+    APPLICATION_INTERNAL_ERROR,
+    DUPLICATE_KEY_IDENTIFIER,
+    REQUIRED_FIELD_MISSING,
+    UNKNOWN_KEY_IDENTIFIER,
+    UNSUPPORTED_PROCESSING_ID,
+    UNSUPPORTED_VERSION_ID,
+    HL7Error,
+    Issue,
+    Location,
+    RejectError,
+)
 from .hl7.ack import build_ack, head_fields
 from .hl7.charset import CHARSETS, declared_charset, strip_bom
 from .hl7.parser import Message, parse_bytes
@@ -110,6 +121,12 @@ class Bridge:
         if msg.version not in cfg.accepted_versions:
             return self._nak(msg, RejectError(f"HL7 version {msg.version} not accepted (accepted: {', '.join(cfg.accepted_versions)})",
                                               UNSUPPORTED_VERSION_ID, Location("MSH", 1, 12)))
+        processing = (msg.msh.get(11) or "").upper()
+        if not processing:
+            return self._nak(msg, RejectError("MSH-11 (processing id) is empty", REQUIRED_FIELD_MISSING, Location("MSH", 1, 11)))
+        if processing not in cfg.accepted_processing_ids:                # a training or test feed pointed at production
+            return self._nak(msg, RejectError(f"processing id {processing} not accepted (accepted: {', '.join(cfg.accepted_processing_ids)})",
+                                              UNSUPPORTED_PROCESSING_ID, Location("MSH", 1, 11)))
 
         key = (msg.sending_app, msg.sending_facility, msg.control_id)
         digest = _digest(msg)

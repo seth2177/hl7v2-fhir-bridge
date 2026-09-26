@@ -55,7 +55,7 @@ the references to real ids.
 | MSH-7 | `Provenance.occurredDateTime` (ignored in the duplicate check) |
 | MSH-9 | message type / trigger / structure → dispatch; trigger → `Provenance.activity` (v2-0003) |
 | MSH-10 | control id → `Provenance.entity.what.identifier`, `Bundle.identifier`, `meta.source` fragment, dedupe key, ACK MSA-2 |
-| MSH-11 | echoed in the ACK |
+| MSH-11 | processing id: the first component must be in `accepted_processing_ids` (default P), else AR 202; empty → AR 101. Echoed in the ACK |
 | MSH-12 | version; must be in `accepted_versions` or AR 203 |
 | MSH-18 | character set (table 0211), see §5 |
 
@@ -178,7 +178,7 @@ Instance UID). OMI's IPC segment is kept the same way, so IPC-3 (the Study Insta
 | 0074 Diagnostic service section | DR.category (v2-0074); modality | category: 0074 codes as sent (CT, NMR, NMS, RUS, RX…); DICOM modality values (MR, US, NM, MG, PT, XA, RF, DX, CR) are not 0074 codes → `RAD`. Modality: CT→CT · NMR, MR→MR · US→US · NMS, NM→NM · MG, XA, RF, DX, CR as is · PT read as PET (0074 PT is Physical Therapy) |
 | 0396 Coding system | Coding.system | LN → loinc.org · SCT (and the non-standard SNOMED, SNOMED-CT) → snomed.info/sct · SNM → terminology.hl7.org/CodeSystem/snm · SNM3 → terminology.hl7.org/CodeSystem/SNM3 · C4/CPT → ama-assn.org/go/cpt · I10 → icd-10 · I10C → icd-10-cm · I9C → icd-9-cm · DCM → DICOM · RADLEX/RID → radlex.org · anything else → `<code_system_base><name>` |
 | 0211 Character set | (decoding) | ASCII, 8859/1…/15, UNICODE UTF-8, GB 18030-2000, KS X 1001, BIG-5, plus common non-standard spellings (UTF-8, CP1252…) |
-| 0357 Error condition | ACK ERR-3 | 100, 101, 102, 103, 200, 201, 203, 204, 205, 207 |
+| 0357 Error condition | ACK ERR-3 | 100, 101, 102, 103, 200, 201, 202, 203, 204, 205, 207 |
 
 **Precedence of ORC-1 and ORC-5.** Cancels, discontinues and holds decide on their own. `CA` with a stale ORC-5 of
 `SC` is still revoked. For NW/XO/SC/OK/RL/OR, ORC-5 is used when present.
