@@ -171,7 +171,7 @@ Instance UID).
 | 0123 Result status | DiagnosticReport.status | O, I, S registered · A, R partial · P preliminary · F final · **C corrected** · X cancelled · anything else (e.g. D, Y, Z) AE 103 |
 | 0027 Priority | ServiceRequest.priority | S stat · A asap · R routine · T, P urgent |
 | 0074 Diagnostic service section | DR.category (v2-0074); modality | category: 0074 codes as sent (CT, NMR, NMS, RUS, RX…); DICOM modality values (MR, US, NM, MG, PT, XA, RF, DX, CR) are not 0074 codes → `RAD`. Modality: CT→CT · NMR, MR→MR · US→US · NMS, NM→NM · MG, XA, RF, DX, CR as is · PT read as PET (0074 PT is Physical Therapy) |
-| 0396 Coding system | Coding.system | LN → loinc.org · SCT/SNM → snomed.info/sct · C4/CPT → ama-assn.org/go/cpt · I10 → icd-10 · I10C → icd-10-cm · I9C → icd-9-cm · DCM → DICOM · RADLEX/RID → radlex.org · anything else → `<code_system_base><name>` |
+| 0396 Coding system | Coding.system | LN → loinc.org · SCT (and the non-standard SNOMED, SNOMED-CT) → snomed.info/sct · SNM → terminology.hl7.org/CodeSystem/snm · SNM3 → terminology.hl7.org/CodeSystem/SNM3 · C4/CPT → ama-assn.org/go/cpt · I10 → icd-10 · I10C → icd-10-cm · I9C → icd-9-cm · DCM → DICOM · RADLEX/RID → radlex.org · anything else → `<code_system_base><name>` |
 | 0211 Character set | (decoding) | ASCII, 8859/1…/15, UNICODE UTF-8, GB 18030-2000, KS X 1001, BIG-5, plus common non-standard spellings (UTF-8, CP1252…) |
 | 0357 Error condition | ACK ERR-3 | 100, 101, 102, 103, 200, 201, 203, 204, 205, 207 |
 

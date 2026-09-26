@@ -93,7 +93,8 @@ DICOM_MODALITY_DISPLAY = {"CT": "Computed Tomography", "MR": "Magnetic Resonance
 # ---- 0396 Coding system -> URI -------------------------------------------------------------
 CODING_SYSTEM_0396 = {
     "LN": LOINC, "LOINC": LOINC,
-    "SCT": SNOMED, "SNM": SNOMED, "SNM3": SNOMED, "SNOMED": SNOMED, "SNOMED-CT": SNOMED,
+    "SCT": SNOMED, "SNOMED": SNOMED, "SNOMED-CT": SNOMED,         # "SNOMED" is not a 0396 code; accepted as SNOMED CT
+    "SNM": "http://terminology.hl7.org/CodeSystem/snm", "SNM3": "http://terminology.hl7.org/CodeSystem/SNM3",   # pre-CT SNOMED
     "C4": "http://www.ama-assn.org/go/cpt", "CPT": "http://www.ama-assn.org/go/cpt", "CPT4": "http://www.ama-assn.org/go/cpt",
     "I10": "http://hl7.org/fhir/sid/icd-10", "I10C": "http://hl7.org/fhir/sid/icd-10-cm", "ICD10CM": "http://hl7.org/fhir/sid/icd-10-cm",
     "I9C": "http://hl7.org/fhir/sid/icd-9-cm", "I9CDX": "http://hl7.org/fhir/sid/icd-9-cm",
