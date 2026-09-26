@@ -152,7 +152,7 @@ def service_request(ctx: Ctx, *, status: str, idents: list[dict], orc: Segment |
     reasons += [c for c in (dt.ce(d.rep(3), ctx) for d in dg1s) if c]
     if reasons:
         sr["reasonCode"] = reasons
-    notes = [n.get(3) for n in ntes if n.get(3)]
+    notes = [t for t in (dt.ft_whole(n, 3, ctx.msg).strip() for n in ntes) if t]
     if notes:
         sr["note"] = [{"text": t} for t in notes]
     return sr

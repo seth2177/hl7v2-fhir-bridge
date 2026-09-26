@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 from urllib.parse import quote
 
 from ..errors import Location
-from ..hl7.parser import Rep
+from ..hl7.parser import HL7_NULL, Message, Rep, Segment
 from . import tables as T
 from .context import Ctx
 
@@ -154,6 +154,15 @@ def ei(value: str | None, ns: str | None, uni: str | None, utype: str | None, ty
 
 def ei_rep(rep: Rep, type_code: str, fallback_kind: str, ctx: Ctx) -> dict | None:
     return ei(rep.get(1), rep.get(2), rep.get(3), rep.get(4), type_code, fallback_kind, ctx)
+
+
+def ft_whole(seg: Segment, field: int, msg: Message) -> str:
+    """A free-text field (TX/FT/ST report text, NTE-3 comments) read whole and unescaped: repetitions become lines,
+    and an unescaped ^ or & that a sender left in the text survives instead of cutting it."""
+    raw = seg.raw(field)
+    rs = msg.delimiters.repetition
+    parts = raw.split(rs) if rs else [raw]
+    return "\n".join("" if p == HL7_NULL else msg.unescape(p).rstrip() for p in parts)
 
 
 # ---- names ---------------------------------------------------------------------------------------

@@ -312,3 +312,10 @@ def test_conclusion_stays_within_the_fhir_string_limit(cfg):
     dr = resources(conv.bundle, "DiagnosticReport")[0]
     assert len(dr["conclusion"].encode("utf-8")) <= 1024 * 1024 and dr["conclusion"].endswith("full report in presentedForm]")
     assert base64.b64decode(dr["presentedForm"][0]["data"]).decode("utf-8").count("Line ") == len(lines)
+
+
+def test_order_comment_keeps_every_repetition_and_a_stray_caret(cfg):
+    """NTE-3 is FT and repeats; only the first component of the first repetition used to survive."""
+    msg = r.orm("NW", "N1", **O1) + "NTE|1||History: prior lobectomy^ right side~Allergy: iodinated contrast\r"
+    sr = resources(to_bundle(msg, cfg), "ServiceRequest")[0]
+    assert sr["note"] == [{"text": "History: prior lobectomy^ right side\nAllergy: iodinated contrast"}]

@@ -20,7 +20,7 @@ import copy
 import re
 
 from ..errors import REQUIRED_FIELD_MISSING, TABLE_VALUE_NOT_FOUND, MappingError
-from ..hl7.parser import HL7_NULL, Message, Segment
+from ..hl7.parser import Message, Segment
 from . import datatypes as dt
 from . import tables as T
 from .context import Ctx
@@ -41,10 +41,7 @@ def _fit_string(s: str, limit: int = FHIR_STRING_MAX_BYTES) -> tuple[str, bool]:
 
 
 def _obx_text(obx: Segment, msg: Message) -> str:
-    raw = obx.raw(5)
-    rs = msg.delimiters.repetition
-    parts = raw.split(rs) if rs else [raw]
-    return "\n".join("" if p == HL7_NULL else msg.unescape(p).rstrip() for p in parts)
+    return dt.ft_whole(obx, 5, msg)
 
 
 def _obx_code(obx: Segment, msg: Message) -> str:
