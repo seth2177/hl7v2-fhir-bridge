@@ -227,8 +227,10 @@ exactly that (`tests/test_validation_ack.py`).
 **XAD**, **XTN**: see PID-11/13/14. **CE/CWE** code ^ text ^ system ^ alt code ^ alt text ^ alt system (^ … ^ original text in CWE-9) → CodeableConcept with up to two codings; `text` from CWE-9, else CE-2, else CE-5.
 
 **Nulls.** An empty field or component means "not sent" and nothing is written. The HL7 explicit null `""` also
-reads as empty. For an upsert (ADT) that means the element is **removed** from the resource, which is what
-`""` asks for. Values are stripped of surrounding spaces (fixed-width legacy systems pad them).
+reads as empty. ADT A01/A04/A08 are applied as a **snapshot** (a full PUT of the Patient), so an element whose PID
+field is empty *or* `""` is removed. That departs from HL7 v2 chapter 2, where empty means "no change" and only
+`""` means "delete"; it assumes the ADT source sends the complete PID on every A08, which is what most do. Values
+are stripped of surrounding spaces (fixed-width legacy systems pad them).
 
 **Escapes.** `\F\ \S\ \T\ \R\ \E\` → the delimiter; `\Xhh…\` → bytes decoded with the message charset;
 `\.br\` and `\.sp n\` → line breaks (n capped at 20; the standard sets no limit). `\.sk n\` → n spaces (capped at 80), `\.ce\` → a line break. `\H\ \N\`, `\.in \.ti \.fi \.nf` and `\Cxxyy\`/`\Mxxyyzz\` (ISO 2022
@@ -241,6 +243,7 @@ charset switching) are dropped. Unknown or unterminated sequences are kept liter
 | Report OBX | `DiagnosticReport.conclusion` + `presentedForm` (+ `conclusionCode` for coded OBX); **no Observation per OBX** | a radiology report is narrative. One Observation per text line adds resources nobody queries. Numeric OBX are out of scope (warning) |
 | OBR-25 = C | `corrected` | the most specific R4 code; `corrected` is a child of `amended` in the R4 hierarchy. One line in `tables.py` to change |
 | Message metadata | Provenance (+ `meta.source`), no MessageHeader | this is not FHIR messaging; Provenance survives in the server |
+| Empty PID field in an ADT | removes the element, like `""` (the ADT is a snapshot) | v2 says empty = no change, but a PUT can only replace the whole Patient; honouring it would need a read and merge on every ADT |
 | Provenance.target | every resource the message asserted: created, updated, patched, or confirmed to exist (a create-if-absent that matched) | R4 defines target as the resources the activity generated or updated, but one atomic transaction can't know in advance which conditional creates will match. For which message wrote a given version, use `meta.source` and `_history` |
 | Replay after a restart | clinical resources are matched or unchanged; the message's Provenance is rewritten under the same id as a new version, because `recorded` is when the bridge processed it | Provenance.recorded is 1..1 and means when it was recorded |
 | Z-segments | kept verbatim on Provenance | the IG does not map them; dropping site data silently is worse |
