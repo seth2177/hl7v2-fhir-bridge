@@ -6,6 +6,10 @@ senders leave it empty. The rules here:
   * MSH-18 declared and known  -> decode strictly. If the bytes are not valid in that character set,
                                   refuse with AE (CharsetError). Guessing would store a corrupted name
                                   on a real patient; the sender has to fix its configuration.
+                                  Latin-1 and the other single-byte sets accept every byte, so "invalid"
+                                  can't catch a sender that says 8859/1 but sends UTF-8. Bytes that are
+                                  valid multi-byte UTF-8 (or start with a UTF-8 BOM) under a single-byte
+                                  declaration are refused the same way.
   * MSH-18 empty or unknown     -> try UTF-8, then each fallback (default cp1252, then latin-1, which
                                   can decode any byte) and add a warning naming the one that worked.
 
@@ -66,7 +70,8 @@ def declared_charset(raw: bytes) -> str:
 def decode(raw: bytes, default: str = "utf-8", fallbacks: tuple[str, ...] = ("cp1252", "latin-1")) -> tuple[str, str, list[str]]:
     """Returns (text, codec used, warnings)."""
     warnings: list[str] = []
-    if raw.startswith(UTF8_BOM):
+    had_bom = raw.startswith(UTF8_BOM)
+    if had_bom:
         raw = raw[len(UTF8_BOM):]
     declared = declared_charset(raw)
     codec = CHARSETS.get(declared.upper()) if declared else None
@@ -74,10 +79,14 @@ def decode(raw: bytes, default: str = "utf-8", fallbacks: tuple[str, ...] = ("cp
         warnings.append(f"MSH-18 '{declared}' is not a known character set; decoding by detection")
     if codec:
         try:
-            return raw.decode(codec), codec, warnings
+            text = raw.decode(codec)
         except UnicodeDecodeError as e:
             raise CharsetError(f"MSH-18 declares {declared} but byte 0x{raw[e.start]:02X} at offset {e.start} is not valid {declared}",
                                DATA_TYPE_ERROR, Location("MSH", 1, 18)) from None
+        if codec not in ("ascii", "utf-8") and _single_byte(codec) and (had_bom or (any(b > 0x7F for b in raw) and _valid_utf8(raw))):
+            raise CharsetError(f"MSH-18 declares {declared} but the bytes are UTF-8 (the sender is probably mislabelled)",
+                               DATA_TYPE_ERROR, Location("MSH", 1, 18))
+        return text, codec, warnings
     for i, c in enumerate((default, *fallbacks)):
         try:
             text = raw.decode(c)
@@ -87,3 +96,15 @@ def decode(raw: bytes, default: str = "utf-8", fallbacks: tuple[str, ...] = ("cp
             warnings.append(f"MSH-18 empty and message is not valid {default}; decoded as {c}")
         return text, c, warnings
     return raw.decode("latin-1"), "latin-1", warnings   # unreachable: latin-1 decodes anything
+
+
+def _single_byte(codec: str) -> bool:
+    return codec in ("latin-1", "cp1252") or codec.startswith("iso8859")
+
+
+def _valid_utf8(raw: bytes) -> bool:
+    try:
+        raw.decode("utf-8")
+        return True
+    except UnicodeDecodeError:
+        return False

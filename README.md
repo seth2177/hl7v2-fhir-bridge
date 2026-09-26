@@ -101,7 +101,7 @@ executed them (see *Scope and safety*).
 | An old status message re-opening a finished order (a resent SC after the cancel) | reads the current order first; completed and revoked are terminal, so the late status is dropped with a warning | `bridge.py` |
 | Timestamps without a time zone | local time in `default_timezone`, DST-correct, with a warning; no zone configured → date only, never a made-up offset | `mapping/datatypes.py` |
 | Partial-precision timestamps (`2026`, `202609151430`) | mapped at their real precision (seconds padded only where FHIR requires them) | `mapping/datatypes.py` |
-| Non-ASCII names (José Núñez), MSH-18 | declared charsets are decoded strictly (a mismatch is AE, not a mangled name); undeclared: UTF-8, then cp1252 with a warning | `hl7/charset.py` |
+| Non-ASCII names (José Núñez), MSH-18 | declared charsets are decoded strictly: bytes that aren't valid in the declared set, or UTF-8 bytes under a single-byte declaration such as 8859/1, are AE, not a mangled name; undeclared: UTF-8, then cp1252 with a warning | `hl7/charset.py` |
 | `\r\n` or `\n` instead of `\r`; a bare LF inside report text | all three terminators accepted; a bare LF in a CR message is data, not a segment | `hl7/parser.py` |
 | Empty fields, trailing separators, `""` explicit nulls, padded values | empty ≠ `""`; trailing separators harmless; values stripped | `hl7/parser.py` |
 | Escapes and formatted text (`\F\ \S\ \.br\ \H\ \Xhh\`); unescaped `^` in report text | full escape handling; report text read whole, so a stray `^` survives | `hl7/escape.py`, `mapping/results.py` |
