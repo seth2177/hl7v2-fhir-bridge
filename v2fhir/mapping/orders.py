@@ -171,6 +171,9 @@ def convert_order_message(msg: Message, ctx: Ctx) -> None:
         idents, key = order_identifiers(orc, obr, ipc, ctx)
         if not key:
             raise MappingError("order has no placer (ORC-2), filler (ORC-3) or accession number", REQUIRED_FIELD_MISSING, orc.loc(2))
+        if ctx.tx.has("ServiceRequest", key):
+            ctx.warn(f"a second ORC/OBR group for order {key['value']} in one message; only the first is used", orc.loc())
+            continue
         status = status_from_orc(orc, ctx)
         control = (orc.get(1) or "").upper()
         if obr is None or pid is None:

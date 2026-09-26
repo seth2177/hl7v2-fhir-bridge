@@ -263,3 +263,14 @@ def test_provenance_traces_msh10_and_keeps_z_segments(cfg):
 def test_every_sample_converts_and_validates(cfg):
     for path in sorted(SAMPLES.glob("*.hl7")):
         to_bundle(path.read_bytes(), cfg)
+
+
+def test_second_group_with_the_same_order_number_is_not_dropped_silently(cfg):
+    """Two ORC/OBR groups sharing one placer number used to collapse into one ServiceRequest with no warning."""
+    msg = r.orm("NW", "C1", **O1)
+    segs = msg.strip("\r").split("\r")
+    orc = next(s for s in segs if s.startswith("ORC"))
+    obr2 = next(s for s in segs if s.startswith("OBR")).replace(r.CT_CHEST, "74150^CT ABDOMEN W/O CONTRAST^C4").replace("OBR|1|", "OBR|2|", 1)
+    conv = convert(parse(msg + orc + "\r" + obr2 + "\r"), cfg)
+    assert len(resources(conv.bundle, "ServiceRequest")) == 1
+    assert any("second ORC/OBR group for order ORD1001" in str(w) for w in conv.warnings)
