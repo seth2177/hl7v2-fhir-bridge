@@ -235,3 +235,19 @@ def test_order_placed_before_an_a40_merge_still_takes_the_surviving_patients_rep
     bridge.close()
     assert res.ack_code == "AA", [str(i) for i in res.issues]
     assert mock_server.store.all("DiagnosticReport")[0]["conclusion"] == "IMPRESSION: ok"
+
+
+
+def test_a_message_whose_every_entry_is_stale_sends_nothing(server_cfg, mock_server):
+    """A resent ORC-only RL for a cancelled order: the PATCH is dropped, and so is its Provenance. An empty
+    transaction used to be written to disk and POSTed anyway."""
+    rl = r.orm("RL", "RIS4", **O1, orc_only=True)
+    first = _bridge(server_cfg)
+    for m in (r.orm("NW", "RIS2", **O1), r.orm("HD", "RIS3", **O1, orc_only=True), rl, r.orm("CA", "RIS5", **O1, orc_only=True)):
+        assert first.handle(m.encode()).ack_code == "AA"
+    first.close()
+    again = _bridge(server_cfg, 1)
+    res = again.handle(rl.encode())
+    again.close()
+    assert res.ack_code == "AA" and res.bundle["entry"] == [] and res.bundle_path is None and res.entries == []
+    assert any("late order status" in str(i) for i in res.issues)

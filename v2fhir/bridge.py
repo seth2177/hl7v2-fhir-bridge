@@ -175,10 +175,12 @@ class Bridge:
                 extra += self._reconcile(bundle)
                 if msg.message_type.upper() == "ADT":
                     extra += self._keep_merges(bundle, merge=msg.trigger.upper() == "A40")
-            # Content hash (MSH-7 ignored): an identical resend overwrites its file; a reused control id gets a new one.
-            path = self.dir_sink.write(bundle, f"{safe_name(msg.sending_app, msg.sending_facility, msg.control_id)}-{digest[:12]}") if self.dir_sink else None
-            if self.fhir_sink:
-                entries = self.fhir_sink.post(bundle, deadline=self._deadline.at)
+            if bundle["entry"]:                # every entry dropped as stale: nothing to write, the warnings say why
+                # Content hash (MSH-7 ignored): an identical resend overwrites its file; a reused control id gets a new one.
+                name = f"{safe_name(msg.sending_app, msg.sending_facility, msg.control_id)}-{digest[:12]}"
+                path = self.dir_sink.write(bundle, name) if self.dir_sink else None
+                if self.fhir_sink:
+                    entries = self.fhir_sink.post(bundle, deadline=self._deadline.at)
         except HL7Error as e:
             return self._nak(msg, e, bundle=bundle, path=path)
         except FhirError as e:
