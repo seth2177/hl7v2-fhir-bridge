@@ -1,9 +1,11 @@
 """Errors that carry enough to build an HL7 ACK: an ACK code, an HL7 table 0357 error code and a location.
 
-  AR  (application reject)  the message could not be understood: framing, MSH, encoding, version, type.
-                            Nothing in it was processed.
+  AR  (application reject)  rejected for reasons unrelated to its content (v2.5.1 2.9.2.2): the message could
+                            not be understood (framing, MSH, version, type, processing id), or the system is
+                            down / had an internal error, so the sender should resend later. Nothing was written.
   AE  (application error)   the message was understood, but its content could not be processed
                             (a required field is missing, a code is unknown, the FHIR server refused it).
+                            Resending the same message won't help.
 """
 from __future__ import annotations
 

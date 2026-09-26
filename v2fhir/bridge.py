@@ -3,12 +3,14 @@
 `Bridge.handle()` never raises. Whatever arrives, the sender gets an ACK it can act on:
 
   AA  accepted (possibly with ERR warnings on v2.5+)
-  AR  rejected: unparseable, unsupported version, (optionally) unsupported message type
-  AE  error: content can't be mapped, generated FHIR invalid, FHIR server refused or unreachable
+  AR  rejected for reasons unrelated to the content: unparseable, unsupported version or processing id,
+      (optionally) unsupported message type; and, by default, FHIR server down or an internal error, where
+      v2.5.1 2.9.2.2 says the sender should resend later (transient_failure_ack = "AE" to change that)
+  AE  error in the content: can't be mapped, generated FHIR invalid, FHIR server refused it (4xx)
 
 The ACK is only AA once the bundle is on disk / accepted by the FHIR server, so an AA really means
-"you can forget this message". On AE the sender keeps it and can retry; retries are safe because the
-bundle is idempotent.
+"you can forget this message". On AR/AE the sender keeps it; a resend is safe because every request is
+conditional and orders and reports are checked before writing.
 """
 from __future__ import annotations
 
@@ -84,7 +86,7 @@ class Bridge:
             result = self._handle(raw)
         except Exception as e:  # noqa: BLE001 -- the listener must never die and the sender must get an answer
             log.exception("internal error handling message")
-            result = self._nak_raw(raw, HL7Error(f"internal error: {type(e).__name__}", APPLICATION_INTERNAL_ERROR))
+            result = self._nak_raw(raw, self._transient(f"internal error: {type(e).__name__}"))
         level = logging.INFO if result.ack_code == "AA" else logging.WARNING
         log.log(level, "%s %s -> %s%s", result.message_type or "?", result.control_id or "?", result.ack_code,
                 "".join(f" | {i}" for i in result.issues[:3]))
@@ -175,8 +177,10 @@ class Bridge:
                 err = HL7Error(f"order not found on the FHIR server, nothing to update ({e})"[:250], UNKNOWN_KEY_IDENTIFIER)
             elif e.status == 412:
                 err = HL7Error(f"identifiers match more than one resource; needs manual reconciliation ({e})"[:250], APPLICATION_INTERNAL_ERROR)
+            elif e.retryable:                  # down, timed out, 5xx: nothing wrong with the message itself
+                err = self._transient(str(e)[:250] + "; will be safe to resend")
             else:
-                err = HL7Error(str(e)[:250] + ("; will be safe to resend" if e.retryable else ""), APPLICATION_INTERNAL_ERROR)
+                err = HL7Error(str(e)[:250], APPLICATION_INTERNAL_ERROR)
             return self._nak(msg, err, bundle=bundle, path=path)
 
         issues = extra + _status_change_for_unknown_order(bundle, entries) + conv.warnings
@@ -272,6 +276,12 @@ class Bridge:
         return bool(mine_ids & linked)
 
     # ---- ACK helpers -------------------------------------------------------------------------------
+    def _transient(self, text: str) -> HL7Error:
+        """System down or internal error: AR by default ("resend later", v2.5.1 2.9.2.2), AE if configured."""
+        err = HL7Error(text, APPLICATION_INTERNAL_ERROR)
+        err.ack_code = self.cfg.transient_failure_ack
+        return err
+
     def _ack(self, msg: Message, code: str, issues: list[Issue], *, entries=None, bundle=None, path=None, duplicate=False) -> Result:
         text = build_ack(code, msg=msg, issues=issues[:MAX_ERR_SEGMENTS], receiving_app=self.cfg.receiving_application,
                          receiving_facility=self.cfg.receiving_facility)

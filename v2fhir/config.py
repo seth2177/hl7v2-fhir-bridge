@@ -24,6 +24,7 @@ class Config:
     accepted_processing_ids: tuple[str, ...] = ("P",)   # MSH-11: P production, T training, D debugging
     default_charset: str = "utf-8"
     fallback_charsets: tuple[str, ...] = ("cp1252", "latin-1")
+    transient_failure_ack: str = "AR"          # FHIR server down / internal error: "AR" (v2.5.1 2.9.2.2), or "AE" for engines that only queue on AE
     unsupported_messages: str = "ack"          # "ack": AA + warning (don't block the sender's queue); "reject": AR
     dedupe_cache_size: int = 10000
     receiving_application: str = "V2FHIR"
@@ -73,6 +74,8 @@ def load_config(path: str | Path | None = None, overrides: dict | None = None) -
         if isinstance(v, list):
             values[k] = tuple(v)
     cfg = Config(**values)
+    if cfg.transient_failure_ack not in ("AR", "AE"):
+        raise ValueError("transient_failure_ack must be 'AR' or 'AE'")
     if cfg.unsupported_messages not in ("ack", "reject"):
         raise ValueError("unsupported_messages must be 'ack' or 'reject'")
     _ = cfg.tz   # fail at startup, not on the first message
