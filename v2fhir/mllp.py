@@ -22,6 +22,7 @@ import asyncio
 import contextlib
 import logging
 import socket
+import sys
 import threading
 import time
 from collections.abc import Callable
@@ -261,7 +262,10 @@ class _Conn:
 
 
 def _fd_budget() -> int:
-    """Half the process's file-descriptor limit (POSIX): the listener must not run out of fds for the FHIR side."""
+    """Half the process's file-descriptor limit (POSIX): the listener must not run out of fds for the FHIR side.
+    On Windows the selector loop uses select(), which takes at most 512 sockets."""
+    if sys.platform == "win32":
+        return 500
     try:
         import resource
         soft = resource.getrlimit(resource.RLIMIT_NOFILE)[0]

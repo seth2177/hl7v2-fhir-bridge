@@ -73,3 +73,11 @@ def test_listener_keeps_accepting_after_a_client_aborts_during_accept(windows_de
                     f"log: {[r.getMessage() for r in caplog.records]}")
     finally:
         srv.stop()
+
+
+
+def test_connection_limit_stays_under_the_windows_select_limit(monkeypatch):
+    """The selector loop on Windows uses select(), which handles at most 512 sockets."""
+    from v2fhir import mllp
+    monkeypatch.setattr(mllp.sys, "platform", "win32")
+    assert mllp._fd_budget() <= 500
