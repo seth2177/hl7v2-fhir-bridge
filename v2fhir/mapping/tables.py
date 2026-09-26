@@ -73,8 +73,16 @@ RESULT_STATUS_TO_ORDER = {"F": "completed", "C": "completed", "X": "revoked"}
 PRIORITY_0027 = {"S": "stat", "A": "asap", "R": "routine", "T": "urgent", "P": "urgent"}
 
 # ---- 0074 Diagnostic service section (OBR-24) -> DICOM modality, where unambiguous ----------
+# Radiology senders often put a DICOM modality (MR, US, PT...) in OBR-24; those become the modality, not the category.
 MODALITY_FROM_0074 = {"CT": "CT", "NMR": "MR", "MR": "MR", "US": "US", "NMS": "NM", "MG": "MG", "PT": "PT", "XA": "XA", "RF": "RF",
                       "DX": "DX", "CR": "CR", "NM": "NM"}
+# Table 0074 itself (THO v2-0074). DiagnosticReport.category only ever carries one of these.
+SERVICE_SECTION_0074 = frozenset({
+    "AU", "BG", "BLB", "CG", "CUS", "CTH", "CT", "CH", "CP", "EC", "EN", "GE", "HM", "IMG", "ICU", "IMM", "LAB", "MB", "MCB", "MYC",
+    "NMS", "NMR", "NRS", "OUS", "OT", "OTH", "OSL", "PAR", "PHR", "PAT", "PT", "PHY", "PF", "RAD", "RX", "RUS", "RC", "RT", "SR", "SP",
+    "TX", "VUS", "VR", "URN", "XRC"})
+# OBR-24 values read as DICOM modalities that are not table 0074 codes (PT is 0074 "Physical Therapy"; here it is PET).
+DICOM_NOT_0074 = frozenset(MODALITY_FROM_0074) - {"CT", "NMR", "NMS"}
 DICOM_MODALITY_DISPLAY = {"CT": "Computed Tomography", "MR": "Magnetic Resonance", "US": "Ultrasound", "NM": "Nuclear Medicine",
                           "MG": "Mammography", "PT": "Positron emission tomography", "XA": "X-Ray Angiography", "RF": "Radio Fluoroscopy",
                           "DX": "Digital Radiography", "CR": "Computed Radiography"}
