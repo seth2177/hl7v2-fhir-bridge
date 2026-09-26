@@ -145,3 +145,22 @@ def test_skip_and_centre_keep_words_and_lines_apart():
     assert unescape("RIGHT\\.sk 1\\LOWER", **esc) == "RIGHT LOWER"
     assert unescape("FINDINGS\\.ce\\Normal", **esc) == "FINDINGS\nNormal"
     assert unescape("a\\.sk 99999\\b", **esc) == "a" + " " * 80 + "b"
+
+
+@pytest.mark.parametrize("offset", ["+1430", "-1401", "+1459"])
+def test_offset_past_14_hours_is_dropped_not_an_error(cfg, offset):
+    """FHIR's dateTime/instant regex allows at most +/-14:00. 14:01-14:59 used to pass the check, then fail
+    validation and AE the whole message; now only that timestamp is dropped, like any other impossible offset."""
+    c = ctx(cfg)
+    assert dt.ts(f"20260915143000{offset}", "dateTime", c) is None and "impossible UTC offset" in str(c.warnings[-1])
+    assert dt.ts("20260915143000+1400", "dateTime", ctx(cfg)) == "2026-09-15T14:30:00+14:00"
+
+
+def test_instant_without_zone_says_it_was_dropped(cfg):
+    cfg.default_timezone = ""
+    c = ctx(cfg)
+    assert dt.ts("20260915143000", "instant", c) is None and "dropped" in str(c.warnings[-1])
+
+
+def test_hour_precision_is_zero_filled(cfg):
+    assert dt.ts("2026091514-0500", "dateTime", ctx(cfg)) == "2026-09-15T14:00:00-05:00"

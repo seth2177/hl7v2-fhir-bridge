@@ -47,14 +47,18 @@ def ts(value: str | None, kind: str, ctx: Ctx, where: Location | None = None) ->
     time = f"{hh}:{mi or '00'}:{ss or '00'}" + (frac or "")
     if off:
         offset = f"{off[:3]}:{off[3:]}"
-        if int(off[1:3]) > 14 or int(off[3:]) > 59:
+        h, mm = int(off[1:3]), int(off[3:])
+        if mm > 59 or h > 14 or (h == 14 and mm):          # FHIR allows -14:00 .. +14:00
             ctx.warn(f"timestamp {value!r} has an impossible UTC offset, dropped", where)
             return None
     else:
         tz = ctx.tz
         if tz is None:
+            if kind == "instant":
+                ctx.warn(f"timestamp {value!r} has no UTC offset and no default time zone is configured; an instant needs one, dropped", where)
+                return None
             ctx.warn(f"timestamp {value!r} has no UTC offset and no default time zone is configured; kept as date only", where)
-            return None if kind == "instant" else date
+            return date
         local = datetime(int(y), int(mo), int(d), int(hh), int(mi or 0), int(ss or 0), tzinfo=tz)
         delta = local.utcoffset() or timedelta(0)
         minutes = int(delta.total_seconds() // 60)
