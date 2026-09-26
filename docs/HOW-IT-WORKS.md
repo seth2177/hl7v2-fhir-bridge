@@ -53,11 +53,15 @@ line noise) are counted and dropped. A new `0x0B` before the end abandons the pa
 `max_message_bytes` keeps only its first 4 KB, enough to NAK with the right MSA-2, so memory stays bounded.
 The search resumes where it stopped, so a 50 MB report arriving in 64 KB reads isn't O(n²).
 
-**The listener.** One asyncio task per connection, on the selector event loop on every OS: on Windows the default
-Proactor loop closes the listening socket when a single client resets during accept. Messages on a connection are handled one at a time, in
-order: HL7 ordering matters (an A08 must not overtake its A04). Each message runs on a worker thread, so a
-slow FHIR server never stalls the other connections. A peer that goes quiet, stops reading its ACKs, or
-joins a crowd of silent connections is dropped (idle timeout, `max_connections`). Nothing a message or a connection does can stop the
+**The listener.** One asyncio task per connection, on the selector event loop on every OS (on Windows the
+default Proactor loop closes the listening socket when a single client resets during accept). Messages on a
+connection are handled one at a time, in order: HL7 ordering matters (an A08 must not overtake its A04). Each
+message runs on a worker thread, but the FHIR part (the reads before writing and the transaction) runs one
+message at a time across all connections, so the read-then-write checks can't race each other. The price is
+that a slow FHIR server delays every sender's ACK, so each message has a deadline (`ack_deadline_seconds`,
+default 25 s, under a typical 30 s sender timeout): when it runs out the sender gets AR and resends later. A peer
+that goes quiet, stops reading its ACKs, or joins a crowd of silent connections is dropped (idle timeout,
+`max_connections`). Nothing a message or a connection does can stop the
 listener: `tests/test_adversarial.py` throws random bytes, truncated frames, oversize frames and hang-ups at it
 from four threads, then checks that it still ACKs a good message.
 

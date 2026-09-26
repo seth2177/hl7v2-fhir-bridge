@@ -23,6 +23,7 @@ out_dir = "data/bundles"
 fhir_base_url = ""          # e.g. "http://localhost:8080/fhir" (HAPI); empty = files only
 fhir_timeout_seconds = 15
 fhir_retries = 2
+ack_deadline_seconds = 25                 # worst case from message received to ACK; keep it under the sender's ACK timeout
 validate = true
 
 [mapping]

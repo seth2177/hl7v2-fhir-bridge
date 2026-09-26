@@ -5,7 +5,6 @@ import hashlib
 import json
 import os
 import re
-import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -54,38 +53,48 @@ class EntryResult:
 
 class FhirSink:
     """POSTs a transaction bundle to <base_url>. Retries connection errors and 5xx with backoff; never 4xx
-    (the same bundle would be refused again)."""
+    (the same bundle would be refused again). `deadline` (a time.monotonic() value) caps every request and
+    stops retrying, so the sender gets its ACK before its own timeout. Callers serialise access (Bridge)."""
 
     def __init__(self, base_url: str, timeout: float = 15.0, retries: int = 2, transport: httpx.BaseTransport | None = None):
         self.base_url = base_url.rstrip("/")
         self.retries = retries
+        self.timeout = timeout
         self._client = httpx.Client(timeout=timeout, transport=transport,
                                     headers={"Content-Type": "application/fhir+json", "Accept": "application/fhir+json"})
-        self._lock = threading.Lock()
 
     def close(self) -> None:
         self._client.close()
 
-    def search(self, query: str) -> list[dict]:
+    def _timeout(self, deadline: float | None) -> float:
+        if deadline is None:
+            return self.timeout
+        remaining = deadline - time.monotonic()
+        if remaining < 0.5:
+            raise FhirError("ACK deadline reached before the FHIR server answered", None, True)
+        return min(self.timeout, remaining)
+
+    def search(self, query: str, deadline: float | None = None) -> list[dict]:
         """GET <base>/<Type>?<params>; returns the matching resources. Raises FhirError."""
         try:
-            with self._lock:
-                r = self._client.get(f"{self.base_url}/{query}")
+            r = self._client.get(f"{self.base_url}/{query}", timeout=self._timeout(deadline))
         except httpx.HTTPError as e:
             raise FhirError(f"FHIR server unreachable: {type(e).__name__}: {e}", None, True) from None
         if r.status_code >= 400:
             raise FhirError(f"FHIR search failed ({r.status_code}): {_diagnostics(r)}", r.status_code, r.status_code >= 500)
         return [e["resource"] for e in r.json().get("entry", []) if "resource" in e]
 
-    def post(self, bundle: dict) -> list[EntryResult]:
+    def post(self, bundle: dict, deadline: float | None = None) -> list[EntryResult]:
         body = json.dumps(bundle, ensure_ascii=False).encode("utf-8")
         last: FhirError | None = None
         for attempt in range(self.retries + 1):
             if attempt:
-                time.sleep(min(0.25 * 2 ** attempt, 4))
+                backoff = min(0.25 * 2 ** attempt, 4)
+                if deadline is not None and deadline - time.monotonic() <= backoff + 0.5:
+                    break                          # no time left for another try before the ACK is due
+                time.sleep(backoff)
             try:
-                with self._lock:
-                    r = self._client.post(self.base_url + "/", content=body)
+                r = self._client.post(self.base_url + "/", content=body, timeout=self._timeout(deadline))
             except httpx.HTTPError as e:
                 last = FhirError(f"FHIR server unreachable: {type(e).__name__}: {e}", None, True)
                 continue

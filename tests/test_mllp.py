@@ -281,3 +281,55 @@ def test_seventy_silent_connections_do_not_lock_out_a_real_sender():
             s.close()
         p.kill()
         p.wait()
+
+
+# ---- a hung FHIR server: the sender still gets its ACK before it gives up -----------------------------------
+def _hung_fhir_server() -> socket.socket:
+    hung = socket.socket()                      # completes the TCP handshake, never answers
+    hung.bind(("127.0.0.1", 0))
+    hung.listen(16)
+    return hung
+
+
+def test_ack_arrives_within_the_ack_deadline_when_the_fhir_server_hangs(cfg):
+    """With 15 s timeouts and 2 retries a hung server used to take 46.5 s, past a typical 30 s sender timeout."""
+    hung = _hung_fhir_server()
+    cfg.fhir_base_url, cfg.out_dir = f"http://127.0.0.1:{hung.getsockname()[1]}/fhir", ""
+    cfg.fhir_timeout_seconds, cfg.fhir_retries, cfg.ack_deadline_seconds = 10, 2, 2.0
+    bridge = Bridge(cfg)
+    srv = ServerThread(MLLPServer(bridge_handler(bridge), "127.0.0.1", 0)).start()
+    try:
+        with MLLPClient("127.0.0.1", srv.port, timeout=10) as c:
+            t0 = time.monotonic()
+            ack = c.send(r.adt("A04", "HUNG1"))
+            assert b"MSA|AR|HUNG1" in ack and time.monotonic() - t0 < 4.0
+    finally:
+        srv.stop()
+        bridge.close()
+        hung.close()
+
+
+def test_a_second_connection_waiting_for_the_fhir_lock_still_gets_its_ack_in_time(cfg):
+    """FHIR writes are serialised across connections on purpose; the wait for the lock counts against the deadline."""
+    hung = _hung_fhir_server()
+    cfg.fhir_base_url, cfg.out_dir = f"http://127.0.0.1:{hung.getsockname()[1]}/fhir", ""
+    cfg.fhir_timeout_seconds, cfg.fhir_retries, cfg.ack_deadline_seconds = 10, 0, 2.0
+    bridge = Bridge(cfg)
+    srv = ServerThread(MLLPServer(bridge_handler(bridge), "127.0.0.1", 0)).start()
+    try:
+        first = MLLPClient("127.0.0.1", srv.port, timeout=10)
+        first.send_raw(frame(r.adt("A04", "SLOW1").encode()))            # holds the lock until its deadline
+        time.sleep(0.3)
+        with MLLPClient("127.0.0.1", srv.port, timeout=10) as second:
+            t0 = time.monotonic()
+            ack = second.send(r.adt("A04", "WAIT1"))
+            assert b"MSA|AR|WAIT1" in ack and time.monotonic() - t0 < 3.0
+        first.close()
+    finally:
+        srv.stop()
+        bridge.close()
+        hung.close()
+
+
+def test_shipped_worst_case_fits_inside_the_bundled_client_timeout(cfg):
+    assert cfg.ack_deadline_seconds < 30          # MLLPClient's default timeout, and a common engine default
