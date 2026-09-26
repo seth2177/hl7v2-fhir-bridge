@@ -136,3 +136,12 @@ def test_sp_line_count_is_bounded():
     assert unescape("a\\.sp 4000000000\\b", **esc) == "a" + "\n" * 20 + "b"
     assert unescape("a\\.sp " + "9" * 5000 + "\\b", **esc) == "a" + "\n" * 20 + "b"
     assert unescape("a\\.sp 3\\b", **esc) == "a\n\n\nb"
+
+
+def test_skip_and_centre_keep_words_and_lines_apart():
+    """v2.5.1 2.7.6: \\.sk n\\ skips n spaces, \\.ce\\ ends the current line and centres the next. Dropping them
+    glued "RIGHT" and "LOWER" together."""
+    esc = dict(field="|", component="^", repetition="~", escape="\\", subcomponent="&")
+    assert unescape("RIGHT\\.sk 1\\LOWER", **esc) == "RIGHT LOWER"
+    assert unescape("FINDINGS\\.ce\\Normal", **esc) == "FINDINGS\nNormal"
+    assert unescape("a\\.sk 99999\\b", **esc) == "a" + " " * 80 + "b"
