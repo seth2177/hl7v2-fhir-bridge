@@ -1,0 +1,20 @@
+[project]
+name = "hl7v2-fhir-bridge"
+version = "0.1.0"
+description = "HL7 v2 (ADT, ORM/OMI, ORU) over MLLP to FHIR R4 transaction bundles for radiology workflow: table-driven, idempotent, provenance-traced."
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Seth Turnbo" }]
+
+[tool.ruff]
+line-length = 160
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B", "I"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = [
+  "ignore::DeprecationWarning",
+]

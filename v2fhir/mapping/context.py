@@ -1,0 +1,63 @@
+from __future__ import annotations
+
+import hashlib
+from dataclasses import dataclass, field
+from datetime import datetime
+from urllib.parse import quote
+from zoneinfo import ZoneInfo
+
+from ..config import Config
+from ..errors import Issue, Location
+from ..hl7.parser import Message
+from .bundle import TransactionBuilder
+
+
+@dataclass
+class Ctx:
+    """Everything one conversion needs, plus the warnings it collects."""
+    msg: Message
+    cfg: Config
+    now: datetime
+    tx: TransactionBuilder = field(default_factory=TransactionBuilder)
+    warnings: list[Issue] = field(default_factory=list)
+    _tz_assumed: int = 0
+    _tz_first: tuple[str, Location | None] | None = None
+
+    def __post_init__(self):
+        self._tz = self.cfg.tz
+
+    @property
+    def tz(self) -> ZoneInfo | None:
+        return self._tz
+
+    def warn(self, text: str, where: Location | None = None, code: str = "0") -> None:
+        self.warnings.append(Issue(code, text, where, "W"))
+
+    def note_assumed_tz(self, value: str, where: Location | None) -> None:
+        self._tz_assumed += 1
+        if self._tz_first is None:
+            self._tz_first = (value, where)
+
+    def finish(self) -> None:
+        if self._tz_assumed:
+            value, where = self._tz_first
+            self.warn(f"{self._tz_assumed} timestamp(s) without UTC offset (first: {value}); assumed {self.cfg.default_timezone}", where)
+
+    # ---- provenance helpers ------------------------------------------------------------------------
+    @property
+    def message_system(self) -> str:
+        """Identifier system for this sender's MSH-10 values (control ids are only unique per sender)."""
+        return f"urn:hl7v2:{quote(self.msg.sending_app, safe='')}:{quote(self.msg.sending_facility, safe='')}"
+
+    @property
+    def source_uri(self) -> str:
+        """meta.source on every resource: which message wrote this version."""
+        return f"{self.message_system}#{quote(self.msg.control_id, safe='')}"
+
+    @property
+    def provenance_id(self) -> str:
+        h = hashlib.sha256(f"{self.msg.sending_app}|{self.msg.sending_facility}|{self.msg.control_id}".encode()).hexdigest()
+        return f"v2-{h[:40]}"
+
+    def meta(self) -> dict:
+        return {"source": self.source_uri}

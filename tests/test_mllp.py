@@ -1,0 +1,150 @@
+"""MLLP framing and the asyncio listener over real TCP on localhost."""
+import socket
+import time
+
+import pytest
+
+from tools import ris_sim as r
+from v2fhir.bridge import Bridge
+from v2fhir.mllp import FrameDecoder, MLLPClient, MLLPServer, ServerThread, bridge_handler, frame
+
+A = b"MSH|^~\\&|A|B|C|D|2026||ADT^A04|1|P|2.5\r"
+B = b"MSH|^~\\&|A|B|C|D|2026||ADT^A04|2|P|2.5\r"
+
+
+def test_one_frame():
+    assert [f.data for f in FrameDecoder().feed(frame(A))] == [A]
+
+
+def test_frame_split_byte_by_byte_including_between_fs_and_cr():
+    d = FrameDecoder()
+    out = []
+    for b in frame(A) + frame(B):
+        out += d.feed(bytes([b]))
+    assert [f.data for f in out] == [A, B] and d.discarded == 0
+
+
+def test_many_frames_in_one_read_and_partial_tail():
+    d = FrameDecoder()
+    data = frame(A) + frame(B) + frame(A)[:10]
+    assert [f.data for f in d.feed(data)] == [A, B]
+    assert [f.data for f in d.feed(frame(A)[10:])] == [A]
+
+
+def test_bytes_outside_frames_are_discarded():
+    d = FrameDecoder()
+    assert [f.data for f in d.feed(b"\r\nnoise" + frame(A) + b"\x00\x00" + frame(B))] == [A, B]
+    assert d.discarded == len(b"\r\nnoise") + 2
+
+
+def test_fs_without_cr_is_data_and_new_start_abandons_partial_frame():
+    d = FrameDecoder()
+    assert [f.data for f in d.feed(b"\x0bab\x1cc" + frame(A))] == [A]           # ab<FS>c never ended: abandoned
+    assert d.discarded == 4
+    assert [f.data for f in FrameDecoder().feed(b"\x0bx\x1cy\x1c\r")] == [b"x\x1cy"]
+
+
+def test_oversize_frame_keeps_head_only_and_bounded_memory():
+    d = FrameDecoder(max_bytes=1000, head_bytes=64)
+    big = A + b"OBX|1|TX|x||" + b"y" * 50_000 + b"\r"
+    out = []
+    for i in range(0, len(frame(big)), 999):
+        out += d.feed(frame(big)[i:i + 999])
+        assert len(d.buf) <= 1000 + 999
+    assert len(out) == 1 and out[0].oversize and out[0].size == len(big) and out[0].data == big[:64]
+    assert [f.data for f in d.feed(frame(A))] == [A]                          # decoder recovers
+
+
+def test_large_message_under_the_limit_is_linear_time():
+    big = A + b"OBX|1|TX|x||" + b"z" * 5_000_000 + b"\r"
+    d = FrameDecoder(max_bytes=10_000_000)
+    data = frame(big)
+    t = time.perf_counter()
+    out = []
+    for i in range(0, len(data), 65536):
+        out += d.feed(data[i:i + 65536])
+    assert [f.data for f in out] == [big]
+    assert time.perf_counter() - t < 5
+
+
+# ---- listener -------------------------------------------------------------------------------------
+@pytest.fixture
+def listener(cfg, tmp_path):
+    cfg.out_dir = str(tmp_path)
+    bridge = Bridge(cfg)
+    srv = ServerThread(MLLPServer(bridge_handler(bridge), "127.0.0.1", 0, max_message_bytes=200_000, idle_timeout=5)).start()
+    yield srv
+    srv.stop()
+
+
+def msa(ack: bytes) -> list[str]:
+    return next(s for s in ack.decode().split("\r") if s.startswith("MSA")).split("|")
+
+
+def test_listener_acks_messages_split_across_writes(listener):
+    payload = frame(r.adt("A04", "SPLIT1").encode())
+    with socket.create_connection(("127.0.0.1", listener.port), timeout=10) as s:
+        for i in range(0, len(payload), 7):
+            s.sendall(payload[i:i + 7])
+            time.sleep(0.001)
+        d = FrameDecoder()
+        acks = []
+        while not acks:
+            acks = d.feed(s.recv(4096))
+    assert msa(acks[0].data)[:3] == ["MSA", "AA", "SPLIT1"]
+
+
+def test_listener_two_messages_in_one_write_acked_in_order(listener):
+    with MLLPClient("127.0.0.1", listener.port) as c:
+        c.send_raw(frame(r.adt("A04", "M1").encode()) + frame(r.adt("A08", "M2").encode()))
+        assert msa(c.recv())[2] == "M1" and msa(c.recv())[2] == "M2"
+
+
+def test_listener_survives_garbage_and_disconnects(listener):
+    for junk in (b"\x0bnot hl7\x1c\r", b"\x0b\x00\xff\xfe\x1c\r", b"\x0bMSH|^~\\&|A\x1c\r"):
+        with MLLPClient("127.0.0.1", listener.port) as c:
+            c.send_raw(junk)
+            assert msa(c.recv())[1] == "AR"
+    for junk in (b"\x0bMSH|^~\\&|half a message", b"random bytes, no frame", b""):     # hang up mid-frame
+        s = socket.create_connection(("127.0.0.1", listener.port))
+        s.sendall(junk)
+        s.close()
+    with MLLPClient("127.0.0.1", listener.port) as c:                           # still serving
+        assert msa(c.send(r.adt("A04", "AFTER")))[:3] == ["MSA", "AA", "AFTER"]
+
+
+def test_oversize_message_gets_ar_with_its_control_id(listener):
+    big = r.adt("A04", "HUGE1") + "OBX|1|TX|x||" + "y" * 300_000 + "\r"
+    with MLLPClient("127.0.0.1", listener.port) as c:
+        m = msa(c.send(big))
+        assert m[1] == "AR" and m[2] == "HUGE1" and "exceeds" in m[3]
+        assert msa(c.send(r.adt("A04", "NEXT")))[1] == "AA"
+
+
+def test_huge_but_allowed_report(cfg, tmp_path):
+    cfg.out_dir = str(tmp_path)
+    srv = ServerThread(MLLPServer(bridge_handler(Bridge(cfg)), "127.0.0.1", 0)).start()
+    try:
+        lines = ["Line %05d of a very long report." % i for i in range(60_000)]      # ~2 MB of OBX text
+        msg = r.oru("F", "BIG1", placer="P1", filler="F1", accession="A1", procedure=r.CT_CHEST, modality="CT", findings=lines, impression="ok")
+        with MLLPClient("127.0.0.1", srv.port, timeout=60) as c:
+            assert msa(c.send(msg))[1] == "AA"
+    finally:
+        srv.stop()
+
+
+def test_listener_survives_a_crashing_handler():
+    calls = []
+
+    def bad(fr):
+        calls.append(fr)
+        if len(calls) == 1:
+            raise RuntimeError("boom")
+        return b"MSH|^~\\&|X\rMSA|AA|2\r"
+    srv = ServerThread(MLLPServer(bad, "127.0.0.1", 0)).start()
+    try:
+        with MLLPClient("127.0.0.1", srv.port, timeout=5) as c:
+            c.send_raw(frame(A))                         # no ACK for the crash, connection stays up
+            assert c.send(B).startswith(b"MSH")
+    finally:
+        srv.stop()
