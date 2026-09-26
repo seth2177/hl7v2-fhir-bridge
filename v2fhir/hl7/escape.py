@@ -6,7 +6,8 @@ Delimiters inside data travel as escape sequences, with the escape character (us
   \\Xhhhh\\  raw bytes in hex, decoded with the message character set (MSH-18)
   \\.br\\    line break (formatted text, FT). Radiology reports are full of these.
   \\H\\ \\N\\  start/stop highlighting: dropped (FHIR plain text has no highlighting)
-  \\.sp n\\  n line breaks;  \\.in \\.ti \\.sk \\.ce \\.fi \\.nf formatting commands: dropped
+  \\.sp n\\  n line breaks, n capped at 20 (a 16-byte escape asking for 4 billion would eat all memory)
+  \\.in \\.ti \\.sk \\.ce \\.fi \\.nf formatting commands: dropped
   \\Cxxyy\\ \\Mxxyyzz\\  character-set switching (ISO 2022): dropped, see docs/MAPPING.md
 
 Splitting on delimiters always happens on the raw text *before* unescaping, so an escaped "|" can never
@@ -18,6 +19,12 @@ from __future__ import annotations
 import re
 
 _SPACE_RX = re.compile(r"^\.sp\s*(\d*)$")
+MAX_SP_LINES = 20
+
+
+def _count(digits: str, cap: int) -> int:
+    """A repeat count from a formatting command, bounded; int() never sees more than 4 digits."""
+    return 1 if not digits else (cap if len(digits) > 4 else min(int(digits), cap))
 
 
 def unescape(text: str, *, field: str, component: str, repetition: str, escape: str | None, subcomponent: str,
@@ -55,7 +62,7 @@ def _translate(seq: str, fs: str, cs: str, rs: str, es: str, ss: str, charset: s
         return "\n"
     m = _SPACE_RX.match(seq)
     if m:
-        return "\n" * (int(m.group(1)) if m.group(1) else 1)
+        return "\n" * _count(m.group(1), MAX_SP_LINES)
     if seq[:3] in (".in", ".ti", ".sk") or seq in (".ce", ".fi", ".nf"):
         return ""
     if seq[:1] == "X" and len(seq) > 1 and len(seq) % 2 == 1:

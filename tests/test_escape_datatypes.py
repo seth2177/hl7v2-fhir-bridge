@@ -127,3 +127,12 @@ def test_xpn_xtn_xad_ce(cfg):
     cc = dt.ce(rep("71250^CT CHEST^C4^CTCH^Chest CT^99RIS"), c)
     assert cc["coding"][0] == {"system": "http://www.ama-assn.org/go/cpt", "code": "71250", "display": "CT CHEST"}
     assert cc["coding"][1]["system"] == "http://example.org/fhir/CodeSystem/99ris" and cc["text"] == "CT CHEST"
+
+
+def test_sp_line_count_is_bounded():
+    """\\.sp n\\ (v2.5.1 2.7.6) is n line breaks. A 16-byte escape asking for 4 billion used to allocate
+    gigabytes; 5,000 digits raised ValueError (int() digit limit) and became an internal error."""
+    esc = dict(field="|", component="^", repetition="~", escape="\\", subcomponent="&")
+    assert unescape("a\\.sp 4000000000\\b", **esc) == "a" + "\n" * 20 + "b"
+    assert unescape("a\\.sp " + "9" * 5000 + "\\b", **esc) == "a" + "\n" * 20 + "b"
+    assert unescape("a\\.sp 3\\b", **esc) == "a\n\n\nb"

@@ -221,7 +221,7 @@ reads as empty. For an upsert (ADT) that means the element is **removed** from t
 `""` asks for. Values are stripped of surrounding spaces (fixed-width legacy systems pad them).
 
 **Escapes.** `\F\ \S\ \T\ \R\ \E\` → the delimiter; `\Xhh…\` → bytes decoded with the message charset;
-`\.br\` and `\.sp n\` → line breaks. `\H\ \N\`, `\.in \.ti \.sk \.ce \.fi \.nf` and `\Cxxyy\`/`\Mxxyyzz\` (ISO 2022
+`\.br\` and `\.sp n\` → line breaks (n capped at 20; the standard sets no limit). `\H\ \N\`, `\.in \.ti \.sk \.ce \.fi \.nf` and `\Cxxyy\`/`\Mxxyyzz\` (ISO 2022
 charset switching) are dropped. Unknown or unterminated sequences are kept literally.
 
 ## 6. Deviations and decisions
