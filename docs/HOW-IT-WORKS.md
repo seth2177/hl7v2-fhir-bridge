@@ -115,7 +115,8 @@ The bundle is validated with `fhir.resources` (structure, cardinality, formats),
 required-binding codes, which the models don't enforce (`gender: "bogus"` passes them). An invalid bundle is an
 AE and is never sent.
 
-It is written to `data/bundles/<sender>_<control id>-<hash>.json`. The name is sanitised, because MSH-10 comes
+It is written to `data/bundles/<sender>_<facility>_<control id>-<name hash>-<content hash>.json`: an identical
+resend overwrites its own file, and a reused control id gets a new one. The name is sanitised, because MSH-10 comes
 from the network and `../../x` is data, not a path. Then it is POSTed to the FHIR server. Connection errors
 and 5xx are retried with backoff; 4xx are not (the same bundle would be refused again).
 

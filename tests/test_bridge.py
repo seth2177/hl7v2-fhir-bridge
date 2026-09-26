@@ -3,6 +3,7 @@ import json
 
 import httpx
 
+from tests.conftest import FIXED_NOW
 from tools import ris_sim as r
 from v2fhir.bridge import Bridge
 from v2fhir.sink import FhirSink
@@ -204,3 +205,25 @@ def test_two_obr_groups_for_one_order_in_one_oru(cfg):
     conv = convert(parse(msg + obr.replace("OBR|1|", "OBR|2|") + "\rOBX|1|TX|&GDT||addendum||||||F\r"), cfg)
     assert len([e for e in conv.bundle["entry"] if e["resource"]["resourceType"] == "DiagnosticReport"]) == 1
     assert any("second OBR" in str(w) for w in conv.warnings)
+
+
+# ---- directory sink: one file per distinct message ------------------------------------------------------
+def _families_on_disk(root) -> set[str]:
+    out = set()
+    for p in root.glob("*.json"):
+        b = json.loads(p.read_text(encoding="utf-8"))
+        out |= {e["resource"]["name"][0]["family"] for e in b["entry"] if e["resource"]["resourceType"] == "Patient"}
+    return out
+
+
+def test_reused_control_id_or_second_facility_does_not_overwrite_an_accepted_bundle(cfg, tmp_path):
+    cfg.out_dir = str(tmp_path / "bundles")
+    bridge = Bridge(cfg, clock=lambda: FIXED_NOW)
+    first = bridge.handle(r.adt("A04", "C1").encode())
+    reused = bridge.handle(r.adt("A04", "C1", name="OTHER^PATIENT").encode())          # counter reset: new message, old MSH-10
+    other_site = bridge.handle(r.adt("A04", "C1", name="THIRD^PATIENT").replace("|RIS_SIM|SYNTH_HOSP|", "|RIS_SIM|OTHER_HOSP|", 1).encode())
+    resend = bridge.handle(r.adt("A04", "C1").encode())
+    assert {first.ack_code, reused.ack_code, other_site.ack_code, resend.ack_code} == {"AA"}
+    assert len({first.bundle_path, reused.bundle_path, other_site.bundle_path}) == 3
+    assert resend.bundle_path == first.bundle_path                     # the same content lands on its own file again
+    assert _families_on_disk(tmp_path / "bundles") == {"NÚÑEZ", "OTHER", "THIRD"}
