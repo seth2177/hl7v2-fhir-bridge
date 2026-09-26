@@ -1,4 +1,4 @@
-"""One Provenance per message: which v2 message (MSH-10) wrote which resources, and when.
+"""One Provenance per message: which resources a v2 message (MSH-10) created, updated or confirmed, and when.
 
 R4 Provenance has no identifier to search on, so it is written with PUT to an id derived from
 sending application + facility + MSH-10 + a hash of the message (MSH-7 ignored): replaying the same

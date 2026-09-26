@@ -51,7 +51,8 @@ class Ctx:
 
     @property
     def source_uri(self) -> str:
-        """meta.source on every resource: which message wrote this version."""
+        """meta.source on every resource: the message that created or last replaced this version (a status-only
+        PATCH keeps the previous one; its Provenance names the patching message)."""
         return f"{self.message_system}#{quote(self.msg.control_id, safe='')}"
 
     @property

@@ -7,7 +7,7 @@
 Hospitals will run HL7 v2 for decades. New systems, AI platforms included, want FHIR. This is a working reference
 implementation of the bridge between them for the radiology workflow. It receives ADT, orders (ORM/OMI) and
 results (ORU) over MLLP. Each message becomes one FHIR transaction Bundle of conditional requests, so a resend
-changes nothing. Every bundle is validated before it is sent, every resource is traced back to the message that
+duplicates nothing and rolls nothing back. Every bundle is validated before it is sent, every resource is traced back to the message that
 wrote it, and the sender always gets an ACK it can act on.
 
 ```mermaid
@@ -114,7 +114,7 @@ executed them (see *Scope and safety*).
 | Generated FHIR that is subtly wrong | every bundle validated (fhir.resources + required value sets) before it leaves; invalid → AE, never sent | `validate.py` |
 | FHIR server down or refusing | down (connection errors, 5xx): retried with backoff, then AR, which v2.5.1 2.9.2.2 defines as "system down, resend later" (`transient_failure_ack = "AE"` for engines that only queue on AE). Refused (4xx): AE, not retried. Every ACK leaves within `ack_deadline_seconds` (default 25 s) | `bridge.py`, `sink.py` |
 | MSH-10 used in a file name | sanitised: `../../etc/passwd` is data | `sink.py` |
-| "Which message wrote this?" | `meta.source` on every resource plus one Provenance per message (targets, MSH-10, sender, Z-segments) | `mapping/provenance.py` |
+| "Which message wrote this?" | `meta.source` on every version (the message that last created or replaced it) plus one Provenance per message (what it asserted, MSH-10, sender, Z-segments) | `mapping/provenance.py` |
 
 **Every field and code mapping:** [docs/MAPPING.md](docs/MAPPING.md) ·
 **One order and its report, hop by hop (with a FHIR primer for v2 people):** [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md)
