@@ -31,7 +31,7 @@ def token(system: str | None, value: str) -> str:
     def esc(s: str) -> str:
         s = s.replace("\\", "\\\\").replace("|", "\\|").replace(",", "\\,").replace("$", "\\$")
         return quote(s, safe=":/._~-")
-    return f"{esc(system)}|{esc(value)}" if system else esc(value)
+    return f"{esc(system)}|{esc(value)}" if system else f"|{esc(value)}"     # "|value" = no system; a bare value = any system
 
 
 def identifier_query(ident: dict, also: list[dict] | None = None) -> str:

@@ -189,9 +189,12 @@ Instance UID). OMI's IPC segment is kept the same way, so IPC-3 (the Study Insta
 | ImagingStudy | Study Instance UID |
 | Provenance | deterministic id from sending app + facility + MSH-10 |
 
-**Identifier.system** from the assigning authority (HD): the site map (`[mapping.assigning_authorities]`) → an
-ISO OID (`urn:oid:`), UUID (`urn:uuid:`) or URI universal id → `<identifier_system_base><namespace>`. An empty
-PID-3.4 is assumed to be `default_assigning_authority` (with a warning). Order numbers without an authority use
+**Identifier.system** from the assigning authority (HD): the site map (`[mapping.assigning_authorities]`, keyed by
+namespace or universal id) → an ISO OID (`urn:oid:`), UUID (`urn:uuid:`) or URI universal id →
+`<identifier_system_base><namespace>` → `<identifier_system_base><universal id>` (with a warning; so does an
+invalid OID). An empty PID-3.4 is assumed to be `default_assigning_authority` (with a warning). A patient is never
+matched on a bare value, because in FHIR `identifier=1001` matches 1001 in any system: an MRN or MRG-1 with no
+authority and no default is AE 101, and a PV1-19 without one writes no Encounter (warning). Order numbers without an authority use
 a **site-wide** fallback (`…/placer-order`, `…/filler-order`, `…/accession`). They are deliberately not per
 sender, because the ORU comes from a different application than the ORM and must produce the same key.
 

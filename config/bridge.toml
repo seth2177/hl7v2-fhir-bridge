@@ -27,7 +27,7 @@ default_timezone = "America/Chicago"      # v2 timestamps without an offset are 
 identifier_system_base = "http://example.org/fhir/sid/"
 code_system_base = "http://example.org/fhir/CodeSystem/"
 mrn_authorities = ["SYNTH_HOSP"]          # PID-3 repetitions from this authority are the MRN
-default_assigning_authority = "SYNTH_HOSP"
+default_assigning_authority = "SYNTH_HOSP"   # "" = an MRN without an assigning authority is AE
 
 [mapping.assigning_authorities]
 SYNTH_HOSP = "http://example.org/fhir/sid/synth-hosp"
