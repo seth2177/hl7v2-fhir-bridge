@@ -139,7 +139,7 @@ DICOM coding, and `ImagingStudy.modality` gets it properly once a study exists.
 | OBX (other types: NM, SN…) | not mapped | warning; the raw message is traceable through Provenance |
 | ZDS-1 (RP: UID^app^type^subtype) | ImagingStudy `identifier = {system: urn:dicom:uid, value: urn:oid:<UID>}` | the R4 convention for Study Instance UID; must be a valid UID (≤64, digits and dots) |
 | OBR-18 | ImagingStudy `identifier` (ACSN) | |
-| — | ImagingStudy `status = available`, `basedOn` → ServiceRequest; DiagnosticReport `imagingStudy` → it | |
+| — | ImagingStudy `status = available`, `basedOn` → ServiceRequest; DiagnosticReport `imagingStudy` → it | only when OBR-25 says the exam was performed (A, P, R, F, C); O, I, S and X create no ImagingStudy |
 
 Report text is read **whole**, per repetition, then unescaped. It is not split into components, because
 reporting systems routinely send an unescaped `^` in free text. `\.br\` becomes a line break. `\H\`/`\N\`

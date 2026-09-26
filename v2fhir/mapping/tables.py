@@ -71,6 +71,8 @@ RESULT_STATUS_0123 = {"O": "registered", "I": "registered", "S": "registered", "
                       "R": "partial", "F": "final", "C": "corrected", "X": "cancelled"}
 # A result tells us the order was done, but never un-cancels or re-opens it (see mapping/results.py).
 RESULT_STATUS_TO_ORDER = {"F": "completed", "C": "completed", "X": "revoked"}
+# OBR-25 values that say the exam was performed; only these create an ImagingStudy (status available).
+RESULT_STATUS_EXAM_PERFORMED = {"A", "P", "R", "F", "C"}
 
 # ---- What an older message may not undo (bridge._reconcile reads the server before writing) ----------
 # DiagnosticReport: a lower rank never replaces a higher one (0123 F: "can only be changed with a corrected
