@@ -10,7 +10,7 @@ Every resource is written in one of four ways, chosen by what the v2 message is 
   patch              PATCH Type?identifier=system|value  (FHIRPath Patch, a Parameters resource)
                      "Change one element." Used when the message is too sparse to rebuild the resource.
   put-by-id          PUT   Type/<deterministic id>
-                     For Provenance, which has no identifier to search on: the id is derived from MSH-10.
+                     For Provenance, which has no identifier to search on: the id is derived from the message.
 
 Inside the bundle, resources reference each other by `urn:uuid:` fullUrls. The server resolves each
 conditional request first, then rewrites those references to the real ids (FHIR R4 http.html#trules).

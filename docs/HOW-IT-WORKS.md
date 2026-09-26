@@ -100,7 +100,7 @@ POST Patient         ifNoneExist identifier=…/synth-hosp|SYN100234          (o
 POST Practitioner    ifNoneExist identifier=…/synth-provider|1001           (ORC-12, OBR-16 and PV1-7: one entry)
 POST Encounter       ifNoneExist identifier=…/synth-hosp|V900001
 POST ServiceRequest  ifNoneExist identifier=…/synth-his|ORD1001,…/synth-ris|FIL5001,…/accession|ACC2001
-PUT  Provenance/v2-de7b1f10…                                                 (id derived from MSH-10)
+PUT  Provenance/v2-4fd5f894…                                                 (id from sender + MSH-10 + content)
 ```
 
 **The choices that matter**

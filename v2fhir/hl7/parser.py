@@ -15,6 +15,7 @@ explicit null, "delete whatever you have". Both read as None; `Segment.is_null()
 """
 from __future__ import annotations
 
+import hashlib
 import re
 from dataclasses import dataclass, field
 
@@ -163,6 +164,15 @@ class Message:
     @property
     def sending_facility(self) -> str:
         return self.msh.get(4) or ""
+
+    @property
+    def content_digest(self) -> str:
+        """Content hash ignoring MSH-7, so a resend with a fresh timestamp still counts as the same message."""
+        fields = list(self.msh.fields)
+        if len(fields) > 7:
+            fields[7] = ""
+        body = "\r".join(["|".join(fields)] + [str(s) for s in self.segments[1:]])
+        return hashlib.sha256(body.encode("utf-8", "surrogatepass")).hexdigest()
 
     @property
     def z_segments(self) -> list[Segment]:

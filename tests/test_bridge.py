@@ -1,7 +1,9 @@
 """End to end through the bridge into the mock FHIR server: idempotency, ordering traps, dedupe, NAKs."""
 import json
+from datetime import timedelta
 
 import httpx
+import pytest
 
 from tests.conftest import FIXED_NOW
 from tools import ris_sim as r
@@ -244,3 +246,51 @@ def test_a_refused_bundle_is_still_ae(cfg, mock_server):
         lambda req: httpx.Response(422, json={"resourceType": "OperationOutcome", "issue": [{"diagnostics": "nope"}]})))
     res = Bridge(cfg, fhir_sink=sink).handle(r.adt("A04", "S3").encode())
     assert res.ack_code == "AE" and "422" in res.issues[0].text
+
+
+# ---- one Provenance per message, even when the sender reuses a control id ---------------------------------
+@pytest.fixture
+def provenance_env(cfg, mock_server, tmp_path):
+    cfg.fhir_base_url, cfg.out_dir, cfg.fhir_retries = mock_server.base_url, str(tmp_path / "b"), 0
+    return cfg, mock_server
+
+
+T0 = FIXED_NOW
+JANE = r.adt("A04", "0001", name="SMITH^JANE").replace(r.PATIENT["ids"], "MRN-A^^^SYNTH_HOSP^MR")
+# the sender's counter reset: a different patient's A04 arrives with the same MSH-10
+JOHN = r.adt("A04", "0001", name="DOE^JOHN").replace(r.PATIENT["ids"], "MRN-B^^^SYNTH_HOSP^MR").replace("V900001", "V900002")
+
+
+def _writers_of(store, family: str) -> list[str]:
+    [pat] = [p for p in store.all("Patient") if p["name"][0]["family"] == family]
+    ref = f"Patient/{pat['id']}"
+    return [p["entity"][0]["what"]["identifier"]["value"] for p in store.all("Provenance")
+            if any(t.get("reference") == ref for t in p["target"])]
+
+
+@pytest.mark.parametrize("restart", [False, True], ids=["same-process", "after-restart"])
+def test_reused_control_id_gets_its_own_provenance(provenance_env, restart):
+    cfg, srv = provenance_env
+    b1 = Bridge(cfg, clock=lambda: T0)
+    assert b1.handle(JANE.encode()).ack_code == "AA"
+    b2 = Bridge(cfg, clock=lambda: T0 + timedelta(minutes=5)) if restart else b1
+    res = b2.handle(JOHN.encode())
+    b1.close()
+    if b2 is not b1:
+        b2.close()
+    assert res.ack_code == "AA" and not res.duplicate
+    assert srv.store.counts()["Patient"] == 2
+    assert srv.store.counts()["Provenance"] == 2, "the second message's Provenance replaced the first one's"
+    assert _writers_of(srv.store, "SMITH") == ["0001"] and _writers_of(srv.store, "DOE") == ["0001"]
+
+
+def test_exact_resend_after_restart_still_maps_to_the_same_provenance(provenance_env):
+    """Guard for the fix: keying the id on content must not turn a resend (fresh MSH-7) into a second Provenance."""
+    cfg, srv = provenance_env
+    b1 = Bridge(cfg, clock=lambda: T0)
+    assert b1.handle(JANE.encode()).ack_code == "AA"
+    b1.close()
+    b2 = Bridge(cfg, clock=lambda: T0 + timedelta(minutes=5))
+    assert b2.handle(JANE.replace("20260915080000", "20260915080500", 1).encode()).ack_code == "AA"
+    b2.close()
+    assert srv.store.counts()["Provenance"] == 1

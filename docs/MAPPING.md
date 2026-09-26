@@ -33,7 +33,7 @@ Request forms (all inside one `transaction` Bundle, all-or-nothing):
 | create-if-absent | `POST Type` + `ifNoneExist: identifier=…` | make sure it exists; a replay matches and changes nothing |
 | upsert | `PUT Type?identifier=…` | this message is authoritative: create or replace (for ServiceRequest and DiagnosticReport the order numbers the server already holds are kept, see §4) |
 | patch | `PATCH Type?identifier=…` with a FHIRPath Patch `Parameters` | change one element; 404 if absent |
-| put-by-id | `PUT Provenance/v2-<sha256(app\|facility\|MSH-10)>` | Provenance has no identifier to search on |
+| put-by-id | `PUT Provenance/v2-<sha256(app\|facility\|MSH-10\|content hash)>` | Provenance has no identifier to search on; the content hash (MSH-7 ignored) gives a reused control id its own Provenance |
 
 `identifier=a|1,b|2` means *any of* (comma is OR in FHIR search). Orders and reports are matched on every
 order number the message carries (see §4). Token values are FHIR-escaped (`\|`, `\,`, `\$`, `\\`) and
@@ -192,7 +192,7 @@ Instance UID). OMI's IPC segment is kept the same way, so IPC-3 (the Study Insta
 | Practitioner | XCN-1 / CNN-1 with its assigning authority (XCN-9 / CNN-9..11); XCN-13 = NPI → us-npi. No authority → one site-wide `<identifier_system_base>provider` system for all senders (warning), so senders must share provider numbering. One id with two different names in one message → the second is a display name only (warning). No id → no resource, display name only (it could never be matched again) |
 | ServiceRequest, DiagnosticReport | one ServiceRequest per order number (a second ORC/OBR group with the same number in one message is ignored with a warning); **any** of placer, filler, accession (OR search). If they match two different orders → 412 → AE: that needs a person. If they match one stored order whose placer, filler or accession of the same system has a different value, it is a different order sharing a number → AE 205 (checked by reading the order first; needs the FHIR server). Numbers the server already holds are kept: a message carrying a subset never erases the others, and a late NW adds the numbers it brings. The matched order or report must belong to this message's patient, or to a patient an A40 linked to it; otherwise AE 207 |
 | ImagingStudy | Study Instance UID |
-| Provenance | deterministic id from sending app + facility + MSH-10 |
+| Provenance | deterministic id from sending app + facility + MSH-10 + content hash (MSH-7 ignored) |
 
 **Identifier.system** from the assigning authority (HD): the site map (`[mapping.assigning_authorities]`, keyed by
 namespace or universal id) → an ISO OID (`urn:oid:`), UUID (`urn:uuid:`) or URI universal id →
