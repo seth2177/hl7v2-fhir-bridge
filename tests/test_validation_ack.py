@@ -1,5 +1,7 @@
 """The validator catches what fhir.resources alone would not, and ACKs are built correctly per version."""
 import copy
+import itertools
+from datetime import datetime
 
 import pytest
 
@@ -7,6 +9,7 @@ from tests.conftest import to_bundle
 from tools import ris_sim as r
 from v2fhir.bridge import Bridge
 from v2fhir.errors import Issue, Location
+from v2fhir.hl7 import ack
 from v2fhir.hl7.ack import build_ack, head_fields
 from v2fhir.hl7.parser import parse, split_batch_bytes
 from v2fhir.validate import BundleInvalid, validate_bundle
@@ -147,3 +150,12 @@ def test_msa2_is_the_inbound_msh10_as_sent_on_both_ack_paths():
 def test_msh11_processing_mode_is_echoed():
     assert build_ack("AA", msg=parse(ECHO.format(cid="C1", pid="P^T"))).split("\r")[0].split("|")[10] == "P^T"
 
+def test_ack_control_ids_stay_unique_after_100000_acks(monkeypatch):
+    class Frozen(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2026, 9, 26, 12, 0, 0, tzinfo=tz)
+    monkeypatch.setattr(ack, "_counter", itertools.count(100000))
+    monkeypatch.setattr(ack, "datetime", Frozen)
+    ids = [ack._new_control_id() for _ in range(10)]
+    assert all(len(i) == 20 for i in ids) and len(set(ids)) == 10
