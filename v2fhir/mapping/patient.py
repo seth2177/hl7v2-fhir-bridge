@@ -171,6 +171,9 @@ def add_encounter(pv1: Segment | None, patient_ref: dict, ctx: Ctx, *, authorita
     start = dt.ts(pv1.get(44), "dateTime", ctx, pv1.loc(44))
     end = dt.ts(pv1.get(45), "dateTime", ctx, pv1.loc(45))
     enc["status"] = "finished" if end else "in-progress"
+    if start and end and not dt.period_ordered(start, end):         # FHIR per-1; the discharge still happened
+        ctx.warn(f"PV1-45 discharge {end} is before PV1-44 admit {start}; period.end left out", pv1.loc(45))
+        end = None
     klass = pv1.get(2)
     if klass and klass.upper() in T.PATIENT_CLASS_0004:
         code, display = T.PATIENT_CLASS_0004[klass.upper()]

@@ -88,7 +88,7 @@ PID-10 and PID-22 (race and ethnicity: US Core extensions), PID-15 (language), P
 | PV1-2 | `class` | table 0004 → v3 ActCode; unmapped → `v3-NullFlavor#UNK` (class is 1..1 in R4) |
 | PV1-3 (PL) | `location[].location.display` | point of care^room^bed^facility as text; no Location resources |
 | PV1-7 / PV1-8 / PV1-17 | `participant[]` ATND / REF / ADM | Practitioner (§ XCN) |
-| PV1-44 / PV1-45 | `period.start` / `period.end` | |
+| PV1-44 / PV1-45 | `period.start` / `period.end` | a discharge earlier than the admit keeps only `start`, with a warning (FHIR per-1) |
 | — | `status` | `finished` if PV1-45 is present, else `in-progress` |
 
 ### MRG (ADT^A40)
@@ -118,7 +118,7 @@ retired record; clients follow `link.type = replaced-by`.
 | ORC-9 | `authoredOn` | only when ORC-1 = NW (v2-to-FHIR IG); a later status change keeps the stored value |
 | ORC-12 (else OBR-16) | `requester` | Practitioner |
 | OBR-4 | `code` | CE/CWE |
-| IPC-5 (else OBR-24) | `orderDetail[]` | modality as a DICOM (DCM) coding, e.g. `CT`, `MR`; see note |
+| IPC-5 (else OBR-24) | `orderDetail[]` | modality as a DICOM (DCM) coding, e.g. `CT`, `MR`, only when OBR-4 gives a `code` (FHIR prr-1), else left out with a warning; see note |
 | TQ1-9 / OBR-27.6 / ORC-7.6 | `priority` | table 0027 |
 | TQ1-7 / OBR-36 / OBR-27.4 | `occurrenceDateTime` | |
 | OBR-31, DG1-3 | `reasonCode[]` | |

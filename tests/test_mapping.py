@@ -1,6 +1,7 @@
 """Each message type -> the FHIR resources and requests it must produce. Every bundle here is also
 validated (fhir.resources R4B models + required bindings) by the to_bundle helper."""
 import base64
+import re
 
 import pytest
 
@@ -8,7 +9,7 @@ from tests.conftest import SAMPLES, entry, resources, sample_bytes, to_bundle
 from tools import ris_sim as r
 from v2fhir.convert import UnsupportedMessage, convert
 from v2fhir.errors import MappingError
-from v2fhir.hl7.parser import parse
+from v2fhir.hl7.parser import parse, parse_bytes
 from v2fhir.mapping.provenance import Z_SEGMENT_EXTENSION
 
 O1 = dict(placer="ORD1001", filler="FIL5001", accession="ACC2001", procedure=r.CT_CHEST, modality="CT")
@@ -282,3 +283,22 @@ def test_omi_ipc_segment_with_the_study_uid_is_kept_on_the_provenance(cfg):
     ipc = next(seg for seg in raw.decode("utf-8").replace("\n", "\r").split("\r") if seg.startswith("IPC"))
     prov = resources(to_bundle(raw, cfg), "Provenance")[0]
     assert ipc.split("|")[3].split("^")[0] in [x["valueString"].split("|")[3].split("^")[0] for x in prov["extension"] if x["valueString"].startswith("IPC")]
+
+
+def test_discharge_before_admit_keeps_the_period_valid(cfg):
+    """FHIR per-1: Period.start <= Period.end. A keying error (discharge an hour before admit) must not produce an
+    invalid Encounter; the end is dropped with a warning and the encounter is still finished."""
+    raw = re.sub(rb"(PV1\|[^\r\n]*\|200609150800\|)(?=[\r\n])", rb"\g<1>200609150700", sample_bytes("adt_a04_v23_latin1.hl7"))
+    assert b"200609150700" in raw
+    conv = convert(parse_bytes(raw), cfg)
+    enc = resources(conv.bundle, "Encounter")[0]
+    assert "end" not in enc["period"] and enc["status"] == "finished" and any("PV1-45" in str(w) for w in conv.warnings)
+
+
+@pytest.mark.parametrize("sample", ["orm_o01_new.hl7", "orm_o01_status_completed.hl7"])
+def test_order_detail_only_with_a_code(cfg, sample):
+    """FHIR prr-1: ServiceRequest.orderDetail requires ServiceRequest.code."""
+    raw = re.sub(rb"(OBR\|1\|[^|]*\|[^|]*\|)71250\^CT CHEST W/O CONTRAST\^C4\|", rb"\1|", sample_bytes(sample))
+    assert b"71250" not in raw
+    for sr in resources(to_bundle(raw, cfg), "ServiceRequest"):
+        assert "orderDetail" not in sr or "code" in sr
