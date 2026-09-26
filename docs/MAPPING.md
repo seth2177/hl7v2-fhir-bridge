@@ -122,7 +122,7 @@ retired record; clients follow `link.type = replaced-by`.
 | TQ1-9 / OBR-27.6 / ORC-7.6 | `priority` | table 0027 |
 | TQ1-7 / OBR-36 / OBR-27.4 | `occurrenceDateTime` | |
 | OBR-31, DG1-3 | `reasonCode[]` | |
-| NTE-3 | `note[].text` | |
+| NTE-3 | `note[].text` | one note per NTE, read whole and unescaped like report text: repetitions become lines, a stray `^` survives |
 | — | `intent = order`, `category = SNOMED 363679005 Imaging` | |
 | ZDS-1 / IPC-3 | not on the ServiceRequest | the ZDS and IPC segments are kept verbatim on the Provenance; an ImagingStudy is created only when the ORU carries ZDS-1 |
 
