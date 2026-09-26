@@ -124,8 +124,10 @@ def service_request(ctx: Ctx, *, status: str, idents: list[dict], orc: Segment |
     if code:
         sr["code"] = code
     mod = modality(obr, ipc)
-    if mod:
+    if mod and code:                  # FHIR prr-1: orderDetail only when code is present
         sr["orderDetail"] = [{"coding": [mod], "text": f"Modality {mod['code']}"}]
+    elif mod:
+        ctx.warn("OBR-4 is empty, so the modality is not written to ServiceRequest.orderDetail (FHIR prr-1)", obr.loc(4) if obr is not None else None)
     prio = priority(orc, obr, tq1)
     if prio:
         sr["priority"] = prio

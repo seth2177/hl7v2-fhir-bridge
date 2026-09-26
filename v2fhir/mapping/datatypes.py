@@ -68,6 +68,14 @@ def ts(value: str | None, kind: str, ctx: Ctx, where: Location | None = None) ->
     return f"{date}T{time}{offset}"
 
 
+def period_ordered(start: str, end: str) -> bool:
+    """FHIR per-1: a Period's start is not after its end. Compares instants when both have a time, else dates."""
+    if "T" in start and "T" in end:
+        return datetime.fromisoformat(start) <= datetime.fromisoformat(end)
+    n = min(len(start), len(end), 10)
+    return start[:n] <= end[:n]
+
+
 # ---- identifiers --------------------------------------------------------------------------------
 def hd_system(namespace: str | None, universal: str | None, universal_type: str | None, ctx: Ctx,
               where: Location | None = None) -> str | None:
