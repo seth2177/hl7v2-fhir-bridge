@@ -72,6 +72,14 @@ RESULT_STATUS_0123 = {"O": "registered", "I": "registered", "S": "registered", "
 # A result tells us the order was done, but never un-cancels or re-opens it (see mapping/results.py).
 RESULT_STATUS_TO_ORDER = {"F": "completed", "C": "completed", "X": "revoked"}
 
+# ---- What an older message may not undo (bridge._reconcile reads the server before writing) ----------
+# DiagnosticReport: a lower rank never replaces a higher one (0123 F: "can only be changed with a corrected
+# result"); at equal rank a report with an older `issued` (OBR-22) loses.
+REPORT_STATUS_RANK = {"registered": 0, "partial": 1, "preliminary": 2, "cancelled": 2, "final": 3,
+                      "amended": 4, "corrected": 4, "appended": 4, "entered-in-error": 5}
+# ServiceRequest: terminal statuses, and the only statuses an order may still move to from them.
+ORDER_STATUS_EXITS = {"completed": {"revoked", "entered-in-error"}, "revoked": {"entered-in-error"}, "entered-in-error": set()}
+
 # ---- 0027 Priority (TQ1-9, OBR-27.6, ORC-7.6) -> ServiceRequest.priority --------------------
 PRIORITY_0027 = {"S": "stat", "A": "asap", "R": "routine", "T": "urgent", "P": "urgent"}
 
