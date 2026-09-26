@@ -11,8 +11,9 @@ Provenance, Parameters and Bundle.
 
 **Reference.** The mapping follows the conventions of the HL7 *v2-to-FHIR* Implementation Guide (segment →
 resource, data type → data type, v2 table → code system). The IG leaves matching and identity to the
-implementer, and so does this bridge in its own way. Every place where I knowingly differ from the IG is listed
-under [Deviations and decisions](#deviations-and-decisions).
+implementer, and so does this bridge in its own way. I compared every code map with the ConceptMaps of the
+v2-to-FHIR IG 1.0.0 (`hl7.fhir.uv.v2mappings`); every difference is listed under
+[Deviations and decisions](#deviations-and-decisions), with the reason.
 
 ---
 
@@ -168,7 +169,7 @@ Instance UID). OMI's IPC segment is kept the same way, so IPC-3 (the Study Insta
 |---|---|---|
 | 0001 Administrative sex | Patient.gender | M male · F female · O other · U unknown · A other · N unknown |
 | 0200 Name type | HumanName.use | L official · D usual · M maiden · N nickname · S anonymous · TEMP, NAV temp · BAD old · A, T and anything else: no use |
-| 0190 Address type | Address.use / type | H home · B, O work · C temp · BA old · M home + type postal |
+| 0190 Address type | Address.use / type | H home · B, O work · C temp · BA old · M home + type postal · anything else: no use |
 | 0201 Telecom use | ContactPoint.use | PRN, ORN, VHN home · WPN work · PRS mobile · NET → system email · empty → the field's default · anything else: no use |
 | 0202 Telecom equipment | ContactPoint.system | PH phone · FX fax · CP phone + use mobile · BP pager · Internet, X.400 email · MD, TDD, TTY, SAT other · empty → phone · anything else other |
 | 0203 Identifier type | Identifier.type | same codes in `terminology.hl7.org/CodeSystem/v2-0203` (MR, PI, VN, PLAC, FILL, ACSN…) |
@@ -176,7 +177,7 @@ Instance UID). OMI's IPC segment is kept the same way, so IPC-3 (the Study Insta
 | 0119 Order control | ServiceRequest.status | NW, OK, XO, XX, RL, OR active (or ORC-5 if present) · SC → ORC-5 required (empty → AE 101; not in table 0038 → AE 103) · CA, CR, OC, DC, DR, OD revoked · HD, OH on-hold · anything else AE 103 |
 | 0038 Order status | ServiceRequest.status | A, IP, SC active · CM completed · CA, DC, RP revoked · HD on-hold · ER entered-in-error |
 | 0123 Result status | DiagnosticReport.status | O, I, S registered · A, R partial · P preliminary · F final · **C corrected** · X cancelled · anything else (e.g. D, Y, Z) AE 103 |
-| 0027 Priority | ServiceRequest.priority | S stat · A asap · R routine · T, P urgent |
+| 0027 Priority | ServiceRequest.priority | S stat · A asap · R routine · T, P urgent · anything else: no priority |
 | 0074 Diagnostic service section | DR.category (v2-0074); modality | category: 0074 codes as sent (CT, NMR, NMS, RUS, RX…); DICOM modality values (MR, US, NM, MG, PT, XA, RF, DX, CR) are not 0074 codes → `RAD`. Modality: CT→CT · NMR, MR→MR · US→US · NMS, NM→NM · MG, XA, RF, DX, CR as is · PT read as PET (0074 PT is Physical Therapy) |
 | 0396 Coding system | Coding.system | LN → loinc.org · SCT (and the non-standard SNOMED, SNOMED-CT) → snomed.info/sct · SNM → terminology.hl7.org/CodeSystem/snm · SNM3 → terminology.hl7.org/CodeSystem/SNM3 · C4/CPT → ama-assn.org/go/cpt · I10 → icd-10 · I10C → icd-10-cm · I9C → icd-9-cm · DCM → DICOM · RADLEX/RID → radlex.org · anything else → `<code_system_base><name>` |
 | 0211 Character set | (decoding) | ASCII, 8859/1…/15, UNICODE UTF-8, GB 18030-2000, KS X 1001, BIG-5, plus common non-standard spellings (UTF-8, CP1252…) |
@@ -256,5 +257,18 @@ charset switching) are dropped. Unknown or unterminated sequences are kept liter
 | A40 | upsert both records, linked | FHIR R4 has no standard merge operation. If the server offers one, use it instead |
 | Older report after a newer one | the DiagnosticReport entry is dropped (warning) after reading the current report: status rank registered < partial < preliminary, cancelled < final < amended, corrected, appended < entered-in-error; at equal rank the older `issued` (OBR-22) loses | a conditional PUT cannot say "only if newer"; table 0123 F "can only be changed with a corrected result"; needs the FHIR server, not the directory sink |
 | Status change on a finished order | completed may still become revoked or entered-in-error, revoked only entered-in-error; anything else is dropped (warning) after reading the current order | R4 request-status: completed and revoked mean no further activity; stops a resent SC or RL re-opening a cancelled order |
+| 0119 CA, CR, OC, DC, DR, OD / HD, OH | `revoked` / `on-hold` (the IG maps CA and HD to `active`) | the bridge applies the placer's request: a cancel means the order is cancelled. IHE RAD-13 uses ORC-1 = CA for a cancelled procedure |
+| ORC-1 cancel or hold vs ORC-5 | the cancel or hold wins over ORC-5 (the IG uses ORC-1 only when ORC-5 is empty) | a stale ORC-5 on a cancel must not leave the order active |
+| 0119 XO, XX, OR, RL, OK | `active` unless ORC-5 says otherwise | a change, release or acknowledgement doesn't end the order |
+| 0123 A | `partial` (the IG leaves A unmatched) | R4 partial = "some results available, report incomplete" |
+| 0001 N | `unknown` (the IG maps N to `other`) | N is "not applicable"; `other` would claim a gender identity the sender didn't state |
+| 0004 R, B | AMB, IMP (the IG keeps the v2-0004 codes for R, B, C, N, U) | Encounter.class is one Coding from v3 ActCode here; C, N and U become NullFlavor UNK |
+| Encounter.status | `in-progress`, or `finished` when PV1-45 is present (the IG maps PV1-2 P to `planned`, U to `unknown`, and A04 to `planned`) | a radiology outpatient registered by A04 is usually in the department; kept simple and stated |
+| 0190 M | use `home` + type `postal` (the IG sets only type `postal`) | a mailing address on a patient is almost always the home |
+| 0201 ORN, VHN | `home` | other residence and vacation home are still home numbers |
+| 0027 T, P | `urgent` (the IG leaves them unmatched) | "timing critical" and "preop" are urgent in practice |
+| 0200 S | `anonymous` (the IG leaves S unmatched) | in v2.3–2.5.1 S is "coded pseudo-name to ensure anonymity" |
+| 0396 "SNOMED" | `http://snomed.info/sct` | not a 0396 code, but senders use it for SNOMED CT |
+| DICOM modality in OBR-24 | DiagnosticReport.category `RAD` with the sent value as text; ImagingStudy.modality from the DICOM code | radiology senders put DICOM modality codes (MR, US, PT) in OBR-24; they are not table 0074 codes |
 | Status-only order messages | FHIRPath Patch of `status` | a full PUT from an ORC-only cancel would erase the procedure and requester |
 | Unsupported events (A03, SIU…) | AA + warning by default | a NAK blocks the sender's queue for a message nobody needs; `reject` is one setting away |

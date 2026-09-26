@@ -1,8 +1,9 @@
 """v2 tables -> FHIR code systems. Every translation the bridge makes is in this file.
 
-Each map is (v2 table) -> (FHIR element's value set). Where the HL7 v2-to-FHIR Implementation Guide has a
-ConceptMap, these follow it; deviations are called out here and in docs/MAPPING.md. A code that is not
-in a map is never guessed: the element is left out and a warning goes back in the ACK / log.
+Each map is (v2 table) -> (FHIR element's value set). Where the HL7 v2-to-FHIR IG 1.0.0 has a ConceptMap,
+these follow it except for the deviations listed in docs/MAPPING.md section 6. A code that is not in a map is
+never guessed: the element is left out (PID-8, PV1-2, ORC-5 and OBR-24 also warn; ORC-1 and OBR-25 are NAKed
+with 103).
 """
 from __future__ import annotations
 
