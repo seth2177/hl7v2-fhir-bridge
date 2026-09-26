@@ -38,7 +38,7 @@ The two things that matter most for an interface:
 2. **Inside a transaction, resources point at each other by temporary ids** (`urn:uuid:…`). The
    ServiceRequest's `subject` points at the Patient entry's `urn:uuid`. The server first works out which real
    Patient that is (existing or new), then rewrites the reference. So the bridge never needs to know a
-   server id. (It does read orders and reports before writing them, for a different reason: see Hop 5.)
+   server id. (It does read patients, orders and reports before writing them, for other reasons: see Hop 5.)
 
 ---
 
@@ -54,17 +54,17 @@ line noise) are counted and dropped. A new `0x0B` before the end abandons the pa
 The search resumes where it stopped, and never looks past the next `0x0B`, so a 10 MB report (the default
 `max_message_bytes`) arriving in 64 KB reads, or a flood of `0x0B` bytes, isn't O(n²).
 
-**The listener.** One asyncio task per connection, on the selector event loop on every OS (on Windows the
-default Proactor loop closes the listening socket when a single client resets during accept). Messages on a
-connection are handled one at a time, in order: HL7 ordering matters (an A08 must not overtake its A04). Each
-message runs on a worker thread, but the FHIR part (the reads before writing and the transaction) runs one
-message at a time across all connections, so the read-then-write checks can't race each other. The price is
-that a slow FHIR server delays every sender's ACK, so each message has a deadline (`ack_deadline_seconds`,
-default 25 s, under a typical 30 s sender timeout): when it runs out the sender gets AR and resends later. A peer
-that goes quiet, stops reading its ACKs, or joins a crowd of silent connections is dropped (idle timeout,
-`max_connections`). Nothing a message or a connection does can stop the
-listener: `tests/test_adversarial.py` throws random bytes, truncated frames, oversize frames and hang-ups at it
-from four threads, then checks that it still ACKs a good message.
+**The listener.** One asyncio task per connection, on the selector event loop on every OS (on Windows the default
+Proactor loop closes the listening socket when a single client resets during accept). Messages on a connection are
+handled one at a time, in order: HL7 ordering matters (an A08 must not overtake its A04). Each message runs on a
+worker thread, but the FHIR part (the reads before writing and the transaction) runs one message at a time across
+all connections, so the read-then-write checks can't race each other. The price is that a slow FHIR server delays
+every sender's ACK, so each message has a deadline (`ack_deadline_seconds`, default 25 s, under a typical 30 s
+sender timeout): when it runs out the sender gets AR and resends later. A peer that goes quiet or stops reading its
+ACKs is dropped (idle timeout), and at `max_connections` the quietest idle connection is closed to make room.
+Nothing a message or a connection does can stop the listener: `tests/test_adversarial.py` throws random bytes,
+truncated frames, oversize frames and hang-ups at it from four threads, then checks that it still ACKs a good
+message.
 
 ## Hop 2: bytes become a message (`v2fhir/hl7/charset.py`, `parser.py`)
 
@@ -81,9 +81,9 @@ left inside report text), not a new segment. Values stay escaped until read, so 
 field. The two-character value `""` (HL7 "delete this") is distinguished from an empty field.
 
 **Field reality.** Everything the parser refuses (no MSH, a garbage segment id, a second MSH, a missing MSH-9,
-MSH-10 or MSH-12) becomes an **AR** with an ERR segment. The garbage is never used as the ERR-2 location (a bad segment id there
-split the ERR segment, one of the fuzzing findings); ERR-8 and MSA-3 quote a few characters of it, escaped with
-the sender's delimiters and stripped of control characters.
+MSH-10 or MSH-12) becomes an **AR** with an ERR segment. The garbage is never used as the ERR-2 location (a bad
+segment id there split the ERR segment, one of the fuzzing findings); ERR-8 and MSA-3 quote a few characters of it,
+escaped with the sender's delimiters and stripped of control characters.
 
 ## Hop 3: have we seen it? (`v2fhir/bridge.py`)
 
@@ -140,13 +140,13 @@ status message. The stale entry is dropped with a warning: a retried old message
 
 ## Hop 6: the ACK (`v2fhir/hl7/ack.py`)
 
-AA only after the bundle is on disk *and* accepted by the server. An AA means "you can forget this message".
-AR and AE both mean "keep it". AR is for problems that have nothing to do with the message's content, including
-"the FHIR server is down, try again later" (v2.5.1 2.9.2.2); AE is for problems in the content itself. Resending is
-safe because every request is conditional and orders and reports are checked before writing. The ACK uses the sender's own
-delimiters, echoes MSH-11/12/18, and puts warnings in ERR segments with severity W, but only for v2.5+, where
-ERR-4 exists. A v2.3 receiver would read any ERR as a failure. Control characters from the inbound message
-are never echoed: a stray `0x0B` or `0x1C` in an ACK breaks the sender's MLLP framing.
+AA only after the bundle is on disk *and* accepted by the server. An AA means "you can forget this message". AR and
+AE both mean "keep it". AR is for problems unrelated to the message's content, including a FHIR server that is down
+(v2.5.1 2.9.2.2: system down or internal error); AE is for problems in the content itself. Resending is safe
+because every request is conditional and orders and reports are checked before writing. The ACK uses the sender's
+own delimiters, echoes MSH-11/12/18, and puts warnings in ERR segments with severity W, but only for v2.5+, where
+ERR-4 exists. A v2.3 receiver would read any ERR as a failure. Control characters from the inbound message are
+never echoed: a stray `0x0B` or `0x1C` in an ACK breaks the sender's MLLP framing.
 
 ---
 

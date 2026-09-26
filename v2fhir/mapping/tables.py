@@ -67,7 +67,7 @@ ORDER_STATUS_0038 = {"A": "active", "IP": "active", "SC": "active", "CM": "compl
 # so anything that looks for amended-or-below finds it. Table 0123 defines C as "correction to results",
 # the same meaning as R4 corrected ("modified after final to correct an error"). Change this line if a consumer wants "amended".
 # R ("results stored; not yet verified") is partial, as in the v2-to-FHIR IG: R4 preliminary means *verified* early results.
-# A -> partial is a deviation (the IG leaves A unmatched). Codes outside table 0123 (D, Y, Z...) are refused with AE 103.
+# A -> partial is a deviation (the IG leaves A unmatched). Y and Z (query-only) and codes outside the table (e.g. D) are refused with AE 103.
 RESULT_STATUS_0123 = {"O": "registered", "I": "registered", "S": "registered", "A": "partial", "P": "preliminary",
                       "R": "partial", "F": "final", "C": "corrected", "X": "cancelled"}
 # A result tells us the order was done, but never un-cancels or re-opens it (see mapping/results.py).

@@ -4,15 +4,15 @@
 host = "127.0.0.1"          # bind address. There is no TLS or auth on MLLP: keep it on a trusted segment (see README)
 port = 2575                 # the IANA port for HL7 over MLLP
 max_message_bytes = 10485760
-idle_timeout_seconds = 300                # reads and ACK writes
-max_connections = 128                     # at the limit the quietest idle connection is dropped
+idle_timeout_seconds = 300  # reads and ACK writes
+max_connections = 128       # at the limit the quietest idle connection is dropped
 
 [hl7]
 accepted_versions = ["2.3", "2.3.1", "2.4", "2.5", "2.5.1"]
 accepted_processing_ids = ["P"]           # MSH-11; a test bridge would take ["T"]
 default_charset = "utf-8"                 # when MSH-18 is empty ...
 fallback_charsets = ["cp1252", "latin-1"] # ... and the bytes are not UTF-8
-transient_failure_ack = "AR"             # FHIR server down / internal error: AR = resend later (v2.5.1 2.9.2.2); "AE" if your engine only queues on AE
+transient_failure_ack = "AR"              # server down / internal error (v2.5.1 2.9.2.2); "AE" if your engine only queues on AE
 unsupported_messages = "ack"              # ADT^A03 etc: "ack" = AA + warning, "reject" = AR
 dedupe_cache_size = 10000
 receiving_application = "V2FHIR"
@@ -23,7 +23,7 @@ out_dir = "data/bundles"
 fhir_base_url = ""          # e.g. "http://localhost:8080/fhir" (HAPI); empty = files only
 fhir_timeout_seconds = 15
 fhir_retries = 2
-ack_deadline_seconds = 25                 # worst case from message received to ACK; keep it under the sender's ACK timeout
+ack_deadline_seconds = 25   # message received -> ACK sent, worst case; keep it under the sender's ACK timeout
 validate = true
 
 [mapping]
@@ -31,7 +31,7 @@ default_timezone = "America/Chicago"      # v2 timestamps without an offset are 
 identifier_system_base = "http://example.org/fhir/sid/"
 code_system_base = "http://example.org/fhir/CodeSystem/"
 mrn_authorities = ["SYNTH_HOSP"]          # PID-3 repetitions from this authority are the MRN
-default_assigning_authority = "SYNTH_HOSP"   # "" = an MRN without an assigning authority is AE
+default_assigning_authority = "SYNTH_HOSP" # "" = an MRN without an assigning authority is AE
 
 [mapping.assigning_authorities]
 SYNTH_HOSP = "http://example.org/fhir/sid/synth-hosp"
