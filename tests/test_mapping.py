@@ -228,6 +228,7 @@ def test_oru_formatted_text_escapes_and_coded_conclusion(cfg):
     assert dr["conclusion"] == "IMPRESSION:\nLung-RADS 2: benign appearance. Annual screening in 12 months."   # \H\ \N\ dropped
     assert dr["conclusionCode"][0]["coding"][0]["code"] == "LR2"
     assert "synth-his|ORD1201," in entry(b, "DiagnosticReport")["request"]["url"]
+    assert dr["resultsInterpreter"][0]["display"] == "DR RACHEL READER MD"   # OBR-32, the principal result interpreter
 
 
 def test_oru_without_impression_uses_whole_text_and_without_status_is_ae(cfg):
