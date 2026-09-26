@@ -154,3 +154,13 @@ def test_utf8_bytes_under_a_single_byte_declaration_are_refused():
     with pytest.raises(CharsetError):
         parse_bytes(b"\xef\xbb\xbf" + msg.encode("latin-1"))
     assert parse_bytes(msg.encode("latin-1")).seg("PID").get(5) == "NÚÑEZ"      # real Latin-1 still decodes
+
+
+def test_a_real_cp1252_message_that_happens_to_be_valid_utf8_is_accepted():
+    """"RENÉ’S" in cp1252 is C9 92, which is also valid UTF-8 (U+0252). A correctly labelled cp1252 message must not be
+    refused as mislabelled UTF-8 just because its bytes can be read that way."""
+    msg = ("MSH|^~\\&|RIS|H|V2FHIR|BRIDGE|20260101120000-0500||ADT^A04^ADT_A01|C1|P|2.5.1||||||CP1252\r"
+           "EVN|A04\rPID|1||123^^^SYNTH_HOSP^MR||RENÉ’S^JO\r")
+    raw = msg.encode("cp1252")
+    assert raw.count(b"\xc9\x92") == 1
+    assert parse_bytes(raw).seg("PID").get(5) == "RENÉ’S"

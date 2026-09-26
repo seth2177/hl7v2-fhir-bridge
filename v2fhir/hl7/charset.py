@@ -87,7 +87,7 @@ def decode(raw: bytes, default: str = "utf-8", fallbacks: tuple[str, ...] = ("cp
         except UnicodeDecodeError as e:
             raise CharsetError(f"MSH-18 declares {declared} but byte 0x{raw[e.start]:02X} at offset {e.start} is not valid {declared}",
                                DATA_TYPE_ERROR, Location("MSH", 1, 18)) from None
-        if codec not in ("ascii", "utf-8") and _single_byte(codec) and (had_bom or (any(b > 0x7F for b in raw) and _valid_utf8(raw))):
+        if codec not in ("ascii", "utf-8") and _single_byte(codec) and (had_bom or _looks_like_utf8_text(raw)):
             raise CharsetError(f"MSH-18 declares {declared} but the bytes are UTF-8 (the sender is probably mislabelled)",
                                DATA_TYPE_ERROR, Location("MSH", 1, 18))
         return text, codec, warnings
@@ -106,9 +106,14 @@ def _single_byte(codec: str) -> bool:
     return codec in ("latin-1", "cp1252") or codec.startswith("iso8859")
 
 
-def _valid_utf8(raw: bytes) -> bool:
+def _looks_like_utf8_text(raw: bytes) -> bool:
+    """Valid UTF-8 whose non-ASCII characters are all Latin letters and punctuation (U+00A0..U+024F): that is a
+    mislabelled UTF-8 name. A real Latin-1/cp1252 message can form valid UTF-8 by chance ("RENÉ’S" is C9 92, which
+    is U+0252), but then it decodes to unlikely characters and is left alone."""
+    if not any(b > 0x7F for b in raw):
+        return False
     try:
-        raw.decode("utf-8")
-        return True
+        text = raw.decode("utf-8")
     except UnicodeDecodeError:
         return False
+    return all(0xA0 <= ord(c) <= 0x24F for c in text if ord(c) > 0x7F)
