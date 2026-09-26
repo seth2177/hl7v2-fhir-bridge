@@ -56,7 +56,10 @@ class Ctx:
 
     @property
     def provenance_id(self) -> str:
-        h = hashlib.sha256(f"{self.msg.sending_app}|{self.msg.sending_facility}|{self.msg.control_id}".encode()).hexdigest()
+        # With the content hash, a resend (even with a fresh MSH-7) rewrites its own Provenance, and a different
+        # message that reuses the control id (a counter reset) gets a new one.
+        key = f"{self.msg.sending_app}|{self.msg.sending_facility}|{self.msg.control_id}|{self.msg.content_digest}"
+        h = hashlib.sha256(key.encode("utf-8", "surrogatepass")).hexdigest()
         return f"v2-{h[:40]}"
 
     def meta(self) -> dict:

@@ -1,8 +1,9 @@
 """One Provenance per message: which v2 message (MSH-10) wrote which resources, and when.
 
 R4 Provenance has no identifier to search on, so it is written with PUT to an id derived from
-sending application + facility + MSH-10: replaying the same message rewrites the same Provenance
-instead of adding another. Every resource also carries meta.source = urn:hl7v2:<app>:<facility>#<MSH-10>.
+sending application + facility + MSH-10 + a hash of the message (MSH-7 ignored): replaying the same
+message rewrites the same Provenance instead of adding another, and a different message that reuses the
+control id (a sender's counter reset) gets its own. Every resource also carries meta.source = urn:hl7v2:<app>:<facility>#<MSH-10>.
 
 Z-segments and IPC (the OMI imaging procedure control segment: accession, requested procedure, Study
 Instance UID in IPC-3) have no FHIR home before a result exists, so each one is kept verbatim on the

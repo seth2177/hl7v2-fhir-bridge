@@ -14,7 +14,6 @@ conditional and orders and reports are checked before writing.
 """
 from __future__ import annotations
 
-import hashlib
 import logging
 import threading
 import time
@@ -138,7 +137,7 @@ class Bridge:
                                               UNSUPPORTED_PROCESSING_ID, Location("MSH", 1, 11)))
 
         key = (msg.sending_app, msg.sending_facility, msg.control_id)
-        digest = _digest(msg)
+        digest = msg.content_digest
         extra: list[Issue] = []
         with self._lock:
             prior = self._seen.get(key)
@@ -325,15 +324,6 @@ class Bridge:
                          receiving_facility=self.cfg.receiving_facility)
         mt = head.get("9.2", "")
         return Result(text, err.ack_code, f"?^{mt}" if mt else "", head.get("10", ""), [], [err.issue], charset=codec or "utf-8")
-
-
-def _digest(msg: Message) -> str:
-    """Content hash ignoring MSH-7, so a resend with a fresh timestamp still counts as the same message."""
-    fields = list(msg.msh.fields)
-    if len(fields) > 7:
-        fields[7] = ""
-    body = "\r".join([ "|".join(fields) ] + [str(s) for s in msg.segments[1:]])
-    return hashlib.sha256(body.encode("utf-8", "surrogatepass")).hexdigest()
 
 
 def _ack_charset(msg: Message) -> str:
