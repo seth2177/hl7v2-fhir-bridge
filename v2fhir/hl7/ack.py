@@ -20,6 +20,7 @@ import threading
 from datetime import datetime
 
 from ..errors import ERROR_TEXT, Issue
+from .charset import strip_bom
 from .escape import escape
 from .parser import SEGMENT_ID_RX, Delimiters, Message
 
@@ -41,8 +42,8 @@ def _ts(now: datetime | None) -> str:
 def head_fields(raw: bytes | str) -> dict[str, str]:
     """Best-effort MSH fields from bytes that may not parse. Never raises."""
     try:
-        text = raw.decode("latin-1") if isinstance(raw, bytes) else raw
-        text = text.lstrip("\ufeff\x0b")
+        text = strip_bom(raw).decode("latin-1") if isinstance(raw, bytes) else raw
+        text = text.lstrip("\ufeff\x0b").removeprefix("\xef\xbb\xbf")
         line = text.replace("\r\n", "\r").replace("\n", "\r").split("\r", 1)[0]
         if not line.startswith("MSH") or len(line) < 8:
             return {}

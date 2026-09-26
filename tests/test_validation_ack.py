@@ -5,9 +5,10 @@ import pytest
 
 from tests.conftest import to_bundle
 from tools import ris_sim as r
+from v2fhir.bridge import Bridge
 from v2fhir.errors import Issue, Location
 from v2fhir.hl7.ack import build_ack, head_fields
-from v2fhir.hl7.parser import parse
+from v2fhir.hl7.parser import parse, split_batch_bytes
 from v2fhir.validate import BundleInvalid, validate_bundle
 
 
@@ -94,3 +95,26 @@ def test_nak_for_unparseable_input_recovers_msh():
     assert s["MSA"][:3] == ["MSA", "AR", "CTRL42"] and s["MSH"][4:6] == ["RIS", "HOSP"] and s["MSH"][11] == "2.4"
     assert head_fields(b"\x00\x01 total garbage") == {}
     assert segs(build_ack("AR", head={}, issues=[]))["MSA"][:3] == ["MSA", "AR", ""]
+
+
+# ---- a UTF-8 BOM in front of MSH, and NAKs in the sender's character set ------------------------------------
+def test_ar_for_a_bom_prefixed_message_that_does_not_parse_still_echoes_msa2(cfg):
+    raw = b"\xef\xbb\xbfMSH|^~\\&|RIS|HOSP|V2FHIR|BRIDGE|20260101||ADT^A04|CTRL77|P|2.5.1\rpid|1\r"
+    result = Bridge(cfg).handle(raw)
+    msh, msa = [s.split("|") for s in result.ack.split("\r")[:2]]
+    assert result.ack_code == "AR" and msa[2] == "CTRL77" and msh[4:6] == ["RIS", "HOSP"]
+
+
+@pytest.mark.parametrize("codec, declared", [("latin-1", "8859/1"), ("utf-8", "UNICODE UTF-8")])
+def test_nak_echoes_a_non_ascii_sender_in_the_declared_charset(cfg, codec, declared):
+    raw = f"MSH|^~\\&|RIS|HÔPITAL|V2FHIR|BRIDGE|20260101||ADT^A04|C9|P|2.5.1||||||{declared}\rpid|1\r".encode(codec)
+    result = Bridge(cfg).handle(raw)
+    msh = result.ack_bytes.decode(codec).split("\r")[0].split("|")
+    assert result.ack_code == "AR" and msh[17] == declared and msh[5] == "HÔPITAL"
+
+
+def test_bom_prefixed_batch_file_yields_only_the_messages():
+    raw = (b"\xef\xbb\xbfFHS|^~\\&|RIS\r\nBHS|^~\\&|RIS\r\n"
+           b"MSH|^~\\&|RIS|H|V|B|2026||ADT^A04|C1|P|2.5.1\r\nPID|1||1^^^H^MR\r\nBTS|1\r\nFTS|1\r\n")
+    parts = split_batch_bytes(raw)
+    assert len(parts) == 1 and parts[0].startswith(b"MSH|")

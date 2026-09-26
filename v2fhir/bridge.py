@@ -25,6 +25,7 @@ from .config import Config
 from .convert import UnsupportedMessage, convert
 from .errors import APPLICATION_INTERNAL_ERROR, DUPLICATE_KEY_IDENTIFIER, UNKNOWN_KEY_IDENTIFIER, UNSUPPORTED_VERSION_ID, HL7Error, Issue, Location, RejectError
 from .hl7.ack import build_ack, head_fields
+from .hl7.charset import CHARSETS, declared_charset, strip_bom
 from .hl7.parser import Message, parse_bytes
 from .mapping import tables as T
 from .mapping.bundle import token
@@ -263,11 +264,23 @@ class Bridge:
         return self._ack(msg, err.ack_code, [err.issue], bundle=bundle, path=path)
 
     def _nak_raw(self, raw: bytes, err: HL7Error) -> Result:
-        head = head_fields(raw)
+        """NAK for bytes that didn't parse. MSH is read, and the NAK written, in the character set MSH-18
+        declares; with none declared, MSH is read as UTF-8 if valid (else Latin-1) and the NAK is UTF-8."""
+        raw = strip_bom(raw)
+        declared = declared_charset(raw)
+        codec = CHARSETS.get(declared.upper()) if declared else None
+        read_as = codec
+        if read_as is None:
+            try:
+                raw.decode("utf-8")
+                read_as = "utf-8"
+            except UnicodeDecodeError:
+                read_as = "latin-1"
+        head = head_fields(raw.decode(read_as, errors="replace"))
         text = build_ack(err.ack_code, head=head, issues=[err.issue], receiving_app=self.cfg.receiving_application,
                          receiving_facility=self.cfg.receiving_facility)
         mt = head.get("9.2", "")
-        return Result(text, err.ack_code, f"?^{mt}" if mt else "", head.get("10", ""), [], [err.issue])
+        return Result(text, err.ack_code, f"?^{mt}" if mt else "", head.get("10", ""), [], [err.issue], charset=codec or "utf-8")
 
 
 def _digest(msg: Message) -> str:
