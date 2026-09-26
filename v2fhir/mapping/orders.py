@@ -139,7 +139,7 @@ def service_request(ctx: Ctx, *, status: str, idents: list[dict], orc: Segment |
         when = dt.ts(obr.get(36), "dateTime", ctx, obr.loc(36)) or dt.ts(obr.get(27, 4), "dateTime", ctx, obr.loc(27, 4))
     if when:
         sr["occurrenceDateTime"] = when
-    if orc is not None:
+    if orc is not None and (orc.get(1) or "").upper() in T.ORDER_CONTROL_IS_NEW:     # IG: ORC-9 -> authoredOn only if ORC-1 = NW
         authored = dt.ts(orc.get(9), "dateTime", ctx, orc.loc(9))
         if authored:
             sr["authoredOn"] = authored

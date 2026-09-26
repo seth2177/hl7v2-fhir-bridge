@@ -166,3 +166,41 @@ def test_reused_accession_for_another_patient_does_not_replace_the_first_patient
     res = bridge.handle(other.encode())
     bridge.close()
     assert res.ack_code == "AE" and [d["conclusion"] for d in mock_server.store.all("DiagnosticReport")] == ["PATIENT A report"]
+
+
+# ---- a PUT replaces the whole resource: what other messages supplied must survive -------------------------
+HIS = {**O1, "filler": "", "accession": ""}          # the HIS knows only its placer number
+RPT = {**O1, "placer": ""}                           # the reporting system echoes filler + accession
+
+
+def test_placer_only_order_change_does_not_erase_filler_and_accession(server_cfg, mock_server):
+    bridge = _bridge(server_cfg)
+    for m in (r.orm("NW", "HIS1", **HIS), r.orm("SC", "RIS1", **O1, order_status="IP"), r.orm("XO", "HIS2", **HIS),
+              r.oru("F", "RPT1", **RPT, findings=["a"], impression="b")):
+        assert bridge.handle(m.encode()).ack_code == "AA"
+    bridge.close()
+    [sr] = mock_server.store.all("ServiceRequest")
+    assert {i["value"] for i in sr["identifier"]} == {"ORD1001", "FIL5001", "ACC2001"}
+    assert mock_server.store.all("DiagnosticReport")[0]["basedOn"] == [{"reference": f"ServiceRequest/{sr['id']}"}]
+
+
+def test_late_new_order_adds_its_placer_number_to_the_order_the_report_created(server_cfg, mock_server):
+    bridge = _bridge(server_cfg)
+    assert bridge.handle(r.oru("F", "RPT1", **RPT, findings=["a"], impression="b").encode()).ack_code == "AA"
+    assert bridge.handle(r.orm("NW", "RIS1", **O1).encode()).ack_code == "AA"
+    [sr] = mock_server.store.all("ServiceRequest")
+    assert "ORD1001" in {i["value"] for i in sr["identifier"]}
+    assert bridge.handle(r.orm("CA", "HIS1", **HIS, orc_only=True).encode()).ack_code == "AA"      # the HIS cancels by placer
+    bridge.close()
+
+
+def test_status_change_does_not_move_authored_on(server_cfg, mock_server):
+    """R4 authoredOn = "when the request transitioned to being actionable"; the IG maps ORC-9 only when ORC-1 = NW."""
+    bridge = _bridge(server_cfg)
+    assert bridge.handle(sample_bytes("orm_o01_new.hl7")).ack_code == "AA"
+    placed = mock_server.store.all("ServiceRequest")[0]["authoredOn"]
+    sc = sample_bytes("orm_o01_status_completed.hl7").replace(b"||CM||^^^^^R||20260915083000|", b"||CM||^^^^^R||20260915103000|")
+    assert b"20260915103000" in sc and bridge.handle(sc).ack_code == "AA"
+    bridge.close()
+    [sr] = mock_server.store.all("ServiceRequest")
+    assert sr["status"] == "completed" and sr["authoredOn"] == placed

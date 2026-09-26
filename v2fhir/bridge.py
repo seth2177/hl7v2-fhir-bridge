@@ -174,6 +174,8 @@ class Bridge:
                     shares one of the numbers -> AE 205, a person has to look
           stale     an older message would undo newer state (a final over a correction, a late preliminary over
                     a final, a status change that re-opens a cancelled order) -> the entry is dropped, with a warning
+          merge     numbers the server has but this message lacks are kept, and so is an order's authoredOn;
+                    a create-if-absent that matches an order lacking some of this message's numbers adds them
         Read-then-write: safe for one connection sending in order; see README for concurrent senders."""
         issues = []
         for e in list(bundle["entry"]):
@@ -198,6 +200,9 @@ class Bridge:
             if stale:
                 _drop_entry(bundle, e)
                 issues.append(Issue("0", stale, Location("OBR", 1, 25) if rt == "DiagnosticReport" else Location("ORC", 1, 1), "W"))
+                continue
+            if req["method"] != "PATCH":
+                _merge_numbers(e, cur, query)
         return issues
 
     # ---- ACK helpers -------------------------------------------------------------------------------
@@ -241,6 +246,24 @@ def _status_change_for_unknown_order(bundle: dict, entries: list[EntryResult]) -
             out.append(Issue(UNKNOWN_KEY_IDENTIFIER, f"status change ({r.get('status')}) for unknown order {ident}; created it",
                              Location("ORC", 1, 2), "W"))
     return out
+
+
+def _merge_numbers(e: dict, cur: dict, query: str) -> None:
+    """A PUT replaces the whole resource, so numbers other systems sent earlier would vanish: keep them (and an
+    order's authoredOn, which only the NW sets). A create-if-absent that matched an order lacking some of this
+    message's numbers becomes a PUT of the stored resource with the numbers added, and nothing else changed."""
+    res, req = e["resource"], e["request"]
+    have = {(i.get("system"), i.get("value")) for i in res.get("identifier", [])}
+    stored = {(i.get("system"), i.get("value")) for i in cur.get("identifier", [])}
+    if req["method"] == "PUT":
+        res["identifier"] = res.get("identifier", []) + [i for i in cur.get("identifier", []) if (i.get("system"), i.get("value")) not in have]
+        if res.get("resourceType") == "ServiceRequest" and "authoredOn" not in res and "authoredOn" in cur:
+            res["authoredOn"] = cur["authoredOn"]
+    elif have - stored:
+        body = {k: v for k, v in cur.items() if k not in ("id", "meta")}
+        body["meta"] = res.get("meta", {})
+        body["identifier"] = cur.get("identifier", []) + [i for i in res.get("identifier", []) if (i.get("system"), i.get("value")) not in stored]
+        e["resource"], e["request"] = body, {"method": "PUT", "url": query}
 
 
 def _id_type(ident: dict) -> str | None:
