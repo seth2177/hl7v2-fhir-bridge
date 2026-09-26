@@ -71,7 +71,7 @@ def cmd_serve(a) -> int:
 
 def cmd_send(a) -> int:
     sys.stdout.reconfigure(encoding="utf-8")
-    with MLLPClient(a.host, a.port) as c:
+    with MLLPClient(a.host, a.port, timeout=a.timeout) as c:
         for message in split_batch_bytes(Path(a.file).read_bytes()):
             print(c.send(message).decode("utf-8", errors="replace").replace("\r", "\n"))
     return 0
@@ -96,6 +96,7 @@ def main(argv=None) -> int:
     t.add_argument("file")
     t.add_argument("--host", default="127.0.0.1")
     t.add_argument("--port", type=int, default=2575)
+    t.add_argument("--timeout", type=float, default=60, help="seconds to wait for each ACK")
     a = ap.parse_args(argv)
     return {"convert": cmd_convert, "serve": cmd_serve, "send": cmd_send}[a.cmd](a)
 

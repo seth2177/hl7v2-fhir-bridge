@@ -36,6 +36,7 @@ class Config:
     fhir_base_url: str = ""                    # POST each bundle here (empty: don't)
     fhir_timeout_seconds: float = 15.0
     fhir_retries: int = 2
+    ack_deadline_seconds: float = 25.0           # message received -> ACK sent, worst case; keep it under the sender's ACK timeout
     validate: bool = True                      # validate every bundle with fhir.resources before sending
 
     # mapping

@@ -11,7 +11,8 @@ the start of the next. FrameDecoder handles all of those, plus the field realiti
 Search restarts where the last one stopped, so a 50 MB message arriving in 64 KB reads is O(n).
 
 MLLPServer: asyncio listener. One task per connection; messages on a connection are handled strictly in
-order (HL7 ordering), each on a worker thread so a slow FHIR server never blocks other connections.
+order (HL7 ordering), each on a worker thread. The FHIR work itself is serialised across connections (see
+Bridge) and bounded by ack_deadline_seconds, so a slow FHIR server delays other senders' ACKs but never past it.
 No exception from a message or a connection can stop the listener. A peer that goes quiet (reads or ACK writes
 stalled past idle_timeout) is dropped, and at max_connections the quietest idle connection makes room.
 """

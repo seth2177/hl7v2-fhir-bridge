@@ -32,11 +32,11 @@ class FlakySink(FhirSink):
     """The FHIR server answers 503 to the next POST only."""
     fail_next = False
 
-    def post(self, bundle):
+    def post(self, bundle, deadline=None):
         if self.fail_next:
             self.fail_next = False
             raise FhirError("FHIR server error 503: busy", 503, True)
-        return super().post(bundle)
+        return super().post(bundle, deadline)
 
 
 # ---- reports: HL7 table 0123 F "can only be changed with a corrected result" ----------------------------

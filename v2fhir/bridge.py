@@ -17,6 +17,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import threading
+import time
 from collections import OrderedDict
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -79,6 +80,11 @@ class Bridge:
         self.on_result = on_result
         self._seen: OrderedDict[tuple[str, str, str], str] = OrderedDict()
         self._lock = threading.Lock()
+        # FHIR work (the reads before writing and the transaction) runs one message at a time across all
+        # connections: the read-then-write checks stay consistent, and radiology volume doesn't need parallel
+        # writes. Waiting for the lock counts against ack_deadline_seconds like everything else.
+        self._fhir_lock = threading.Lock()
+        self._deadline = threading.local()
 
     # ---- entry points -----------------------------------------------------------------------------
     def handle(self, raw: bytes) -> Result:
@@ -113,6 +119,7 @@ class Bridge:
     # ---- pipeline ---------------------------------------------------------------------------------
     def _handle(self, raw: bytes) -> Result:
         cfg = self.cfg
+        self._deadline.at = time.monotonic() + cfg.ack_deadline_seconds     # this message's ACK is due by then
         try:
             msg = parse_bytes(raw, cfg.default_charset, cfg.fallback_charsets)
         except HL7Error as e:
@@ -160,15 +167,19 @@ class Bridge:
 
         entries: list[EntryResult] = []
         path = None
+        locked = False
         try:
             if self.fhir_sink:
+                locked = self._fhir_lock.acquire(timeout=max(0.0, self._deadline.at - time.monotonic()))
+                if not locked:
+                    raise FhirError("FHIR writes queued behind another connection past the ACK deadline", None, True)
                 extra += self._reconcile(bundle)
                 if msg.message_type.upper() == "ADT" and msg.trigger.upper() != "A40":
                     extra += self._keep_merges(bundle)
             # The content hash (MSH-7 ignored) keeps an identical resend on its own file but gives a reused control id a new one.
             path = self.dir_sink.write(bundle, f"{safe_name(msg.sending_app, msg.sending_facility, msg.control_id)}-{digest[:12]}") if self.dir_sink else None
             if self.fhir_sink:
-                entries = self.fhir_sink.post(bundle)
+                entries = self.fhir_sink.post(bundle, deadline=self._deadline.at)
         except HL7Error as e:
             return self._nak(msg, e, bundle=bundle, path=path)
         except FhirError as e:
@@ -182,6 +193,9 @@ class Bridge:
             else:
                 err = HL7Error(str(e)[:250], APPLICATION_INTERNAL_ERROR)
             return self._nak(msg, err, bundle=bundle, path=path)
+        finally:
+            if locked:
+                self._fhir_lock.release()
 
         issues = extra + _status_change_for_unknown_order(bundle, entries) + conv.warnings
         with self._lock:
@@ -213,7 +227,7 @@ class Bridge:
             query = f"{rt}?{req['ifNoneExist']}" if req["method"] == "POST" else req["url"]
             if "?" not in query:
                 continue
-            current = self.fhir_sink.search(query)
+            current = self._search(query)
             if len(current) != 1:
                 continue                      # none: it is created; several: the server answers 412 -> AE
             cur = current[0]
@@ -245,7 +259,7 @@ class Bridge:
             res, req = e["resource"], e["request"]
             if res.get("resourceType") != "Patient" or req["method"] != "PUT" or "?" not in req["url"]:
                 continue
-            current = self.fhir_sink.search(req["url"])
+            current = self._search(req["url"])
             if len(current) != 1:
                 continue
             cur = current[0]
@@ -258,6 +272,9 @@ class Bridge:
                 res["link"] = cur["link"]
         return issues
 
+    def _search(self, query: str) -> list[dict]:
+        return self.fhir_sink.search(query, deadline=self._deadline.at)
+
     def _same_patient(self, bundle: dict, res: dict, cur: dict) -> bool:
         """Is the stored resource's subject this message's patient, or a patient an A40 linked to it?"""
         stored = (cur.get("subject") or {}).get("reference", "")
@@ -268,10 +285,10 @@ class Bridge:
         query = req["url"].split("?", 1)[1] if "?" in req["url"] else req.get("ifNoneExist")
         if not query:
             return True
-        mine_ids = {p.get("id") for p in self.fhir_sink.search(f"Patient?{query}")}
+        mine_ids = {p.get("id") for p in self._search(f"Patient?{query}")}
         sid = stored.split("/", 1)[1]
         linked = {sid}
-        for p in self.fhir_sink.search(f"Patient?_id={sid}"):
+        for p in self._search(f"Patient?_id={sid}"):
             linked |= {(ln.get("other") or {}).get("reference", "").split("/", 1)[-1] for ln in p.get("link", [])}
         return bool(mine_ids & linked)
 

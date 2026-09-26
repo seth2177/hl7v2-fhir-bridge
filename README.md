@@ -112,7 +112,7 @@ executed them (see *Scope and safety*).
 | A training or test feed (MSH-11 T or D) pointed at production | AR 202, never written; `accepted_processing_ids` says which ids this bridge takes | `bridge.py` |
 | Unsupported events (A03, SIU…) blocking the sender's queue | AA + warning by default, AR if configured | `bridge.py` |
 | Generated FHIR that is subtly wrong | every bundle validated (fhir.resources + required value sets) before it leaves; invalid → AE, never sent | `validate.py` |
-| FHIR server down or refusing | down (connection errors, 5xx): retried with backoff, then AR, which v2.5.1 2.9.2.2 defines as "system down, resend later" (`transient_failure_ack = "AE"` for engines that only queue on AE). Refused (4xx): AE, not retried | `bridge.py`, `sink.py` |
+| FHIR server down or refusing | down (connection errors, 5xx): retried with backoff, then AR, which v2.5.1 2.9.2.2 defines as "system down, resend later" (`transient_failure_ack = "AE"` for engines that only queue on AE). Refused (4xx): AE, not retried. Every ACK leaves within `ack_deadline_seconds` (default 25 s) | `bridge.py`, `sink.py` |
 | MSH-10 used in a file name | sanitised: `../../etc/passwd` is data | `sink.py` |
 | "Which message wrote this?" | `meta.source` on every resource plus one Provenance per message (targets, MSH-10, sender, Z-segments) | `mapping/provenance.py` |
 
@@ -162,10 +162,11 @@ its own (the sender's queue and the AR/AE resend contract are the durability), n
 and no batch (FHS/BHS) over MLLP. Text OBX becomes the report; numeric OBX are not mapped to Observations.
 
 **Known limits.** The dedupe cache is in memory. Encounters are matched on the visit number alone, so a site
-that reuses visit numbers across facilities needs a per-facility system. The checks that read orders and reports before writing (ordering, number conflicts, patient) and the
-unknown-order warning need the FHIR server (the directory sink alone can't know server state). They read
-before writing, which is safe for one connection sending in order. Two connections sending updates to the same
-report at the same moment can race, and so can concurrent conditional creates on some servers. A40 writes both
+that reuses visit numbers across facilities needs a per-facility system. The checks that read orders, reports and
+patients before writing (ordering, number conflicts, patient, merges) and the unknown-order warning need the FHIR
+server (the directory sink alone can't know server state). The bridge runs its own FHIR work one message at a
+time, so its connections can't race each other, but another system writing the same resources at the same moment
+can, and so can concurrent conditional creates on some servers. A40 writes both
 patient records rather than calling a server merge operation. The requests are written to the R4 spec and
 executed by the mock in the tests; they have not yet been run against HAPI or another production server.
 
