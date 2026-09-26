@@ -112,7 +112,7 @@ executed them (see *Scope and safety*).
 | A training or test feed (MSH-11 T or D) pointed at production | AR 202, never written; `accepted_processing_ids` says which ids this bridge takes | `bridge.py` |
 | Unsupported events (A03, SIU…) blocking the sender's queue | AA + warning by default, AR if configured | `bridge.py` |
 | Generated FHIR that is subtly wrong | every bundle validated (fhir.resources + required value sets) before it leaves; invalid → AE, never sent | `validate.py` |
-| FHIR server down or refusing | AE, so the sender keeps the message; 5xx and connection errors retried with backoff, 4xx not | `sink.py` |
+| FHIR server down or refusing | down (connection errors, 5xx): retried with backoff, then AR, which v2.5.1 2.9.2.2 defines as "system down, resend later" (`transient_failure_ack = "AE"` for engines that only queue on AE). Refused (4xx): AE, not retried | `bridge.py`, `sink.py` |
 | MSH-10 used in a file name | sanitised: `../../etc/passwd` is data | `sink.py` |
 | "Which message wrote this?" | `meta.source` on every resource plus one Provenance per message (targets, MSH-10, sender, Z-segments) | `mapping/provenance.py` |
 
@@ -158,7 +158,7 @@ run_demo.py      the whole workflow in one command
 
 **Message subset.** ADT^A01/A04/A08/A40, ORM^O01, OMI^O23 and ORU^R01, in HL7 v2.3–2.5.1, for the radiology
 workflow. It is not a certified interface engine. There is no general routing, no queueing or persistence of
-its own (the sender's queue and the AE/resend contract are the durability), no enhanced-mode acknowledgements,
+its own (the sender's queue and the AR/AE resend contract are the durability), no enhanced-mode acknowledgements,
 and no batch (FHS/BHS) over MLLP. Text OBX becomes the report; numeric OBX are not mapped to Observations.
 
 **Known limits.** The dedupe cache is in memory. Encounters are matched on the visit number alone, so a site

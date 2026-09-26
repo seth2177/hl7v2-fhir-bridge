@@ -131,7 +131,9 @@ status message. The stale entry is dropped with a warning: a retried old message
 ## Hop 6: the ACK (`v2fhir/hl7/ack.py`)
 
 AA only after the bundle is on disk *and* accepted by the server. An AA means "you can forget this message".
-AE means "keep it"; resending is safe because every request is conditional. The ACK uses the sender's own
+AR and AE both mean "keep it". AR is for problems that have nothing to do with the message's content, including
+"the FHIR server is down, try again later" (v2.5.1 2.9.2.2); AE is for problems in the content itself. Resending is
+safe because every request is conditional and orders and reports are checked before writing. The ACK uses the sender's own
 delimiters, echoes MSH-11/12/18, and puts warnings in ERR segments with severity W, but only for v2.5+, where
 ERR-4 exists. A v2.3 receiver would read any ERR as a failure. Control characters from the inbound message
 are never echoed: a stray `0x1C` in an ACK ends the sender's MLLP frame early.

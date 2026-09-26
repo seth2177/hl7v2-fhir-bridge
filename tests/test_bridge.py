@@ -132,12 +132,12 @@ def test_mapping_error_is_ae_and_retry_after_fix_works(bridge):
     assert send(bridge, r.adt("A04", "E1")).ack_code == "AA"            # AE was not cached as "seen"
 
 
-def test_fhir_server_down_is_ae_and_resend_succeeds(cfg, tmp_path, mock_server):
+def test_fhir_server_down_is_ar_and_resend_succeeds(cfg, tmp_path, mock_server):
     cfg.fhir_retries = 0
     down = Bridge(cfg, fhir_sink=FhirSink("http://127.0.0.1:9/fhir", timeout=2, retries=0))
     res = down.handle(r.adt("A04", "S1").encode())
     down.close()
-    assert res.ack_code == "AE" and "unreachable" in res.issues[0].text and "safe to resend" in res.issues[0].text
+    assert res.ack_code == "AR" and "unreachable" in res.issues[0].text and "safe to resend" in res.issues[0].text
     up = Bridge(cfg, fhir_sink=FhirSink(mock_server.base_url, retries=0))
     assert up.handle(r.adt("A04", "S1").encode()).ack_code == "AA"
     up.close()
@@ -227,3 +227,20 @@ def test_reused_control_id_or_second_facility_does_not_overwrite_an_accepted_bun
     assert len({first.bundle_path, reused.bundle_path, other_site.bundle_path}) == 3
     assert resend.bundle_path == first.bundle_path                     # the same content lands on its own file again
     assert _families_on_disk(tmp_path / "bundles") == {"NÚÑEZ", "OTHER", "THIRD"}
+
+
+def test_outage_ack_code_is_configurable_for_engines_that_only_queue_on_ae(cfg):
+    """v2.5.1 2.9.2.2: AR covers "system down, internal error" (resend later); some engines only queue on AE."""
+    cfg.transient_failure_ack = "AE"
+    down = Bridge(cfg, fhir_sink=FhirSink("http://127.0.0.1:9/fhir", timeout=2, retries=0))
+    res = down.handle(r.adt("A04", "S2").encode())
+    down.close()
+    assert res.ack_code == "AE" and "safe to resend" in res.issues[0].text
+
+
+def test_a_refused_bundle_is_still_ae(cfg, mock_server):
+    """4xx: the server read the bundle and said no; resending the same message won't help."""
+    sink = FhirSink(mock_server.base_url, retries=0, transport=httpx.MockTransport(
+        lambda req: httpx.Response(422, json={"resourceType": "OperationOutcome", "issue": [{"diagnostics": "nope"}]})))
+    res = Bridge(cfg, fhir_sink=sink).handle(r.adt("A04", "S3").encode())
+    assert res.ack_code == "AE" and "422" in res.issues[0].text

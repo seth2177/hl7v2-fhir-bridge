@@ -62,7 +62,7 @@ def test_final_reprocessed_from_the_error_queue_does_not_revert_the_correction(s
     corrected = r.oru("C", "RPT3", **O1, findings=["nodule right LOWER lobe"], impression="IMPRESSION: CORRECTED: right LOWER lobe",
                       when="20260915130000")
     sink.fail_next = True
-    assert bridge.handle(final.encode()).ack_code == "AE"
+    assert bridge.handle(final.encode()).ack_code == "AR"
     assert bridge.handle(corrected.encode()).ack_code == "AA"
     bridge.handle(final.encode())
     bridge.close()
