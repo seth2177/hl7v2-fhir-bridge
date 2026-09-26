@@ -91,6 +91,8 @@ def build_ack(code: str, *, msg: Message | None = None, head: dict[str, str] | N
         control, processing, trigger, charset = head.get("10", ""), head.get("11") or "P", head.get("9.2", ""), head.get("18", "")
         if not _looks_like_version(version):
             version = default_version
+        if not head.get("enc"):          # MSH-2 unusable: we answer with | ^ ~ \ &, so the echoed values must be escaped in them
+            control, processing = escape(control), escape(processing)
     fs, cs = d.field, d.component
 
     def esc(s: str) -> str:
