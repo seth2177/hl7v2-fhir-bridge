@@ -173,8 +173,8 @@ class Bridge:
                 if not locked:
                     raise FhirError("FHIR writes queued behind another connection past the ACK deadline", None, True)
                 extra += self._reconcile(bundle)
-                if msg.message_type.upper() == "ADT" and msg.trigger.upper() != "A40":
-                    extra += self._keep_merges(bundle)
+                if msg.message_type.upper() == "ADT":
+                    extra += self._keep_merges(bundle, merge=msg.trigger.upper() == "A40")
             # Content hash (MSH-7 ignored): an identical resend overwrites its file; a reused control id gets a new one.
             path = self.dir_sink.write(bundle, f"{safe_name(msg.sending_app, msg.sending_facility, msg.control_id)}-{digest[:12]}") if self.dir_sink else None
             if self.fhir_sink:
@@ -249,10 +249,11 @@ class Bridge:
                 _merge_numbers(e, cur, query)
         return issues
 
-    def _keep_merges(self, bundle: dict) -> list[Issue]:
+    def _keep_merges(self, bundle: dict, merge: bool = False) -> list[Issue]:
         """An A40 leaves link entries on both patients, but PID carries no links, so the next A08's PUT would
         erase them, and an A08 from a feed that still uses the merged-away MRN would re-activate that record.
-        Read the current Patient first: keep its links, and don't touch a record that was merged away."""
+        Read the current Patient first: keep its links, and don't touch a record that was merged away. An A40
+        itself adds its new link to the ones already there (a second merge into the same survivor)."""
         issues = []
         for e in bundle["entry"]:
             res, req = e["resource"], e["request"]
@@ -263,7 +264,10 @@ class Bridge:
                 continue
             cur = current[0]
             merged_into = [ln for ln in cur.get("link", []) if ln.get("type") == "replaced-by"]
-            if cur.get("active") is False and merged_into:
+            if merge:
+                have = {(ln.get("other") or {}).get("reference") for ln in res.get("link", [])}
+                res["link"] = res.get("link", []) + [ln for ln in cur.get("link", []) if (ln.get("other") or {}).get("reference") not in have]
+            elif cur.get("active") is False and merged_into:
                 e["request"] = {"method": "POST", "url": "Patient", "ifNoneExist": req["url"].split("?", 1)[1]}
                 issues.append(Issue("0", f"patient was merged into {merged_into[0].get('other', {}).get('reference')}; "
                                          "demographics not applied", Location("PID", 1, 3), "W"))
@@ -285,11 +289,23 @@ class Bridge:
         if not query:
             return True
         mine_ids = {p.get("id") for p in self._search(f"Patient?{query}")}
-        sid = stored.split("/", 1)[1]
-        linked = {sid}
-        for p in self._search(f"Patient?_id={sid}"):
-            linked |= {(ln.get("other") or {}).get("reference", "").split("/", 1)[-1] for ln in p.get("link", [])}
-        return bool(mine_ids & linked)
+        if not mine_ids:
+            return False                      # this message's patient doesn't exist yet: the order is someone else's
+        return bool(self._merged_with({stored.split("/", 1)[1]}) & self._merged_with(mine_ids))
+
+    def _merged_with(self, ids: set[str], hops: int = 5) -> set[str]:
+        """These Patients plus every Patient linked to them by A40 merges, following links both ways."""
+        seen, frontier = set(ids), set(ids)
+        for _ in range(hops):
+            nxt = set()
+            for pid in frontier:
+                for p in self._search(f"Patient?_id={pid}"):
+                    nxt |= {(ln.get("other") or {}).get("reference", "").split("/", 1)[-1] for ln in p.get("link", [])}
+            frontier = nxt - seen - {""}
+            if not frontier:
+                break
+            seen |= frontier
+        return seen
 
     # ---- ACK helpers -------------------------------------------------------------------------------
     def _transient(self, text: str) -> HL7Error:
