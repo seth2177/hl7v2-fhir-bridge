@@ -51,8 +51,16 @@ class FrameDecoder:
         self.oversize_head: bytes | None = None
         self.oversize_size = 0
         self.discarded = 0         # bytes thrown away outside frames / abandoned frames
+        self.abandoned = 0         # partial frames dropped because a new VT arrived
 
     def feed(self, data: bytes) -> list[Frame]:
+        before = self.abandoned
+        out = self._feed(data)
+        if self.abandoned > before:
+            log.warning("MLLP start block inside an unfinished frame; %d partial frame(s) abandoned", self.abandoned - before)
+        return out
+
+    def _feed(self, data: bytes) -> list[Frame]:
         self.buf += data
         out: list[Frame] = []
         while True:
@@ -66,17 +74,20 @@ class FrameDecoder:
                 del self.buf[:start + 1]
                 self.in_frame, self.scan = True, 0
                 continue
-            end = self.buf.find(END, self.scan)
-            restart = self.buf.find(VT, self.scan, end if end >= 0 else len(self.buf))
-            if restart >= 0:                       # new frame started before this one ended
-                log.warning("MLLP start block inside an unfinished frame; %d bytes abandoned", restart + self.oversize_size)
+            # Look for the next VT first and only search for END before it: each byte is examined a constant
+            # number of times, so a run of VT bytes can't make this quadratic.
+            restart = self.buf.find(VT, self.scan)
+            end = self.buf.find(END, self.scan, restart if restart >= 0 else len(self.buf))
+            if end < 0 and restart >= 0:           # new frame started before this one ended
+                self.abandoned += 1
                 self.discarded += restart + self.oversize_size
                 del self.buf[:restart]
                 self.in_frame, self.oversize_head, self.oversize_size = False, None, 0
                 continue
             if end < 0:
                 self.scan = max(0, len(self.buf) - 1)       # FS may be the last byte; CR may come next read
-                if len(self.buf) + self.oversize_size > self.max_bytes:
+                pending = len(self.buf) - (1 if self.buf.endswith(FS) else 0)     # a trailing FS isn't payload
+                if pending + self.oversize_size > self.max_bytes:
                     if self.oversize_head is None:
                         self.oversize_head = bytes(self.buf[:self.head_bytes])
                     keep = self.buf[-1:]                     # might be FS

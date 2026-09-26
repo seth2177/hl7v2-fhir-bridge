@@ -148,3 +148,22 @@ def test_listener_survives_a_crashing_handler():
             assert c.send(B).startswith(b"MSH")
     finally:
         srv.stop()
+
+
+def test_a_run_of_start_blocks_decodes_in_linear_time():
+    """Every VT abandons the frame before it. The END search used to rescan the whole buffer for each one:
+    64 KB of 0x0B took seconds on the event loop and stalled every other connection."""
+    dec = FrameDecoder()
+    t0 = time.perf_counter()
+    assert dec.feed(b"\x0b" * 65536) == []
+    assert time.perf_counter() - t0 < 0.5
+    assert [f.data for f in FrameDecoder().feed(b"\x0b" * 1000 + frame(b"MSH|ok"))] == [b"MSH|ok"]
+
+
+@pytest.mark.parametrize("split", [False, True])
+def test_frame_of_exactly_max_bytes_is_accepted_however_it_arrives(split):
+    payload = b"M" * 100
+    dec = FrameDecoder(max_bytes=100)
+    data = frame(payload)
+    frames = dec.feed(data[:-1]) + dec.feed(data[-1:]) if split else dec.feed(data)
+    assert [(f.data, f.oversize) for f in frames] == [(payload, False)]
