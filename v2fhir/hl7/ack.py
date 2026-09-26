@@ -31,7 +31,7 @@ _lock = threading.Lock()
 def _new_control_id() -> str:
     with _lock:
         n = next(_counter)
-    return f"ACK{datetime.now().strftime('%y%m%d%H%M%S')}{n:05d}"[:20]
+    return f"ACK{datetime.now().strftime('%y%m%d%H%M%S')}{n % 100000:05d}"      # 20 chars; unique unless 100k ACKs in one second
 
 
 def _ts(now: datetime | None) -> str:
