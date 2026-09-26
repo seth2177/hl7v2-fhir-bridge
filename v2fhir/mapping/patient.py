@@ -138,8 +138,10 @@ def practitioner_ref(ident: dict | None, name: dict | None, ctx: Ctx) -> dict | 
 def _same_person(a: dict, b: dict) -> bool:
     if (a.get("family") or "").casefold() != (b.get("family") or "").casefold():
         return False
-    ga, gb = (a.get("given") or [""])[0].casefold(), (b.get("given") or [""])[0].casefold()
-    return not (ga and gb) or ga == gb
+    ga, gb = (a.get("given") or [""])[0].casefold().rstrip("."), (b.get("given") or [""])[0].casefold().rstrip(".")
+    if not (ga and gb) or ga == gb:
+        return True
+    return min(len(ga), len(gb)) == 1 and ga[0] == gb[0]          # J and JOHN: one sender sends the initial only
 
 
 def xcn_ref(seg: Segment, field: int, ctx: Ctx) -> dict | None:

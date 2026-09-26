@@ -270,3 +270,20 @@ def test_report_under_an_old_mrn_after_two_merges_into_the_orders_patient(server
     res = bridge.handle(with_mrn(r.oru("F", "R1", **O1, findings=["a"], impression="IMPRESSION: ok"), "SYNA").encode())
     bridge.close()
     assert res.ack_code == "AA", [str(i) for i in res.issues]
+
+
+
+def _report_with_providers(pv1_7: str, orc12: str) -> str:
+    return ("MSH|^~\\&|REP|SYNTH_HOSP|V2FHIR|BRIDGE|20260915120000-0500||ORU^R01^ORU_R01|R1|P|2.5.1\r"
+            "PID|1||SYN1^^^SYNTH_HOSP^MR||DOE^JANE||19700101|F\r"
+            f"PV1|1|O|||||{pv1_7}||||||||||||V1^^^SYNTH_HOSP^VN\r"
+            f"ORC|RE|ORD1^SYNTH_HIS|FIL1^SYNTH_RIS||CM|||||||{orc12}\r"
+            "OBR|1|ORD1^SYNTH_HIS|FIL1^SYNTH_RIS|71250^CT CHEST^C4|||20260915101200-0500|||||||||||ACC1||||20260915120000-0500||CT|F\r"
+            "OBX|1|TX|&IMP^Impression|1|IMPRESSION: normal.||||||F\r")
+
+
+def test_same_provider_with_an_initial_or_a_full_given_name_is_one_practitioner():
+    """PV1-7 carries JOHN, ORC-12 only J: same id, same family, same person. It used to lose the requester reference."""
+    conv = convert(parse(_report_with_providers("1001^SMITH^JOHN^^^^^^SYNTH_PRV", "1001^SMITH^J^^^^^^SYNTH_PRV")), _cfg(), NOW)
+    sr = next(e["resource"] for e in conv.bundle["entry"] if e["resource"]["resourceType"] == "ServiceRequest")
+    assert "reference" in sr["requester"], [w.text for w in conv.warnings]
