@@ -99,6 +99,11 @@ PID-10 and PID-22 (race and ethnicity: US Core extensions), PID-15 (language), P
 
 MRG-1 naming the same patient as PID-3 is an AE (205).
 
+Later A01/A04/A08 keep the merge: the bridge reads the current Patient first (needs the FHIR server), carries its
+`link` entries into the PUT, and an ADT that still carries the merged-away MRN is applied as create-if-absent with
+a warning, so it can't re-activate that record. Orders and results that still carry the old MRN attach to the
+retired record; clients follow `link.type = replaced-by`.
+
 ### ORC / OBR / TQ1 / IPC / DG1 / NTE → ServiceRequest
 
 | Field | FHIR | Notes |
