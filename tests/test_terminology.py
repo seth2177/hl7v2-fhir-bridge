@@ -1,11 +1,12 @@
 """Code maps checked against HL7 tables and the v2-to-FHIR IG 1.0.0 ConceptMaps (see docs/MAPPING.md)."""
 import pytest
 
-from tests.conftest import resources, sample_bytes, to_bundle
+from tests.conftest import FIXED_NOW, resources, sample_bytes, to_bundle
 from v2fhir.convert import convert
 from v2fhir.errors import HL7Error
 from v2fhir.hl7.parser import parse, parse_bytes
 from v2fhir.mapping import datatypes as dt
+from v2fhir.mapping.context import Ctx
 
 V2_0074 = "http://terminology.hl7.org/CodeSystem/v2-0074"
 
@@ -64,3 +65,13 @@ def _name_use(code: str) -> str | None:
 def test_name_type_0200(code, use):
     """T is Indigenous/Tribal/Community name (not temporary) and A is Alias (not usual): the IG leaves both unmatched."""
     assert _name_use(code) == use
+
+
+# ---- CWE-3 (table 0396) -> Coding.system -------------------------------------------------------------
+@pytest.mark.parametrize("cwe, system", [("T-28000^Lung^SNM3", "http://terminology.hl7.org/CodeSystem/SNM3"),
+                                         ("T-28000^Lung^SNM", "http://terminology.hl7.org/CodeSystem/snm"),
+                                         ("39607008^Lung structure^SCT", "http://snomed.info/sct")])
+def test_pre_ct_snomed_is_not_labelled_snomed_ct(cfg, cwe, system):
+    """0396 SNM (SNOMED 2nd ed.) and SNM3 (SNOMED International) codes are not SNOMED CT concept ids."""
+    msg = parse(f"MSH|^~\\&|A|B|C|D|2026||ORU^R01|1|P|2.5\rOBX|1|CE|X||{cwe}\r")
+    assert dt.ce(msg.seg("OBX").rep(5), Ctx(msg=msg, cfg=cfg, now=FIXED_NOW))["coding"][0]["system"] == system
