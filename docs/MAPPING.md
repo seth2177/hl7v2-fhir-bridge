@@ -31,7 +31,7 @@ Request forms (all inside one `transaction` Bundle, all-or-nothing):
 | Name | FHIR request | Meaning |
 |---|---|---|
 | create-if-absent | `POST Type` + `ifNoneExist: identifier=…` | make sure it exists; a replay matches and changes nothing |
-| upsert | `PUT Type?identifier=…` | this message is authoritative: create or replace |
+| upsert | `PUT Type?identifier=…` | this message is authoritative: create or replace (for ServiceRequest and DiagnosticReport the order numbers the server already holds are kept, see §4) |
 | patch | `PATCH Type?identifier=…` with a FHIRPath Patch `Parameters` | change one element; 404 if absent |
 | put-by-id | `PUT Provenance/v2-<sha256(app\|facility\|MSH-10)>` | Provenance has no identifier to search on |
 
@@ -108,7 +108,7 @@ MRG-1 naming the same patient as PID-3 is an AE (205).
 | ORC-3 (else OBR-3) | `identifier` type **FILL** | |
 | OBR-18 (ORM) / IPC-1 (OMI) | `identifier` type **ACSN** | IHE Scheduled Workflow puts the accession number in OBR-18 (ORM) and IPC-1 (OMI) |
 | ORC-5 | `status` | table 0038 |
-| ORC-9 | `authoredOn` | |
+| ORC-9 | `authoredOn` | only when ORC-1 = NW (v2-to-FHIR IG); a later status change keeps the stored value |
 | ORC-12 (else OBR-16) | `requester` | Practitioner |
 | OBR-4 | `code` | CE/CWE |
 | IPC-5 (else OBR-24) | `orderDetail[]` | modality as a DICOM (DCM) coding, e.g. `CT`, `MR`; see note |
@@ -185,7 +185,7 @@ Instance UID).
 | Patient | the MRN: PID-3 repetition of type MR from the first `mrn_authorities` entry that has one; else the first MR; else the first PI or the first identifier at all (with a warning). No PID-3 → AE 101 |
 | Encounter | PV1-19 |
 | Practitioner | XCN-1 / CNN-1 with its assigning authority. No id → no resource, display name only (it could never be matched again) |
-| ServiceRequest, DiagnosticReport | **any** of placer, filler, accession (OR search). If they match two different orders → 412 → AE: that needs a person. If they match one stored order whose placer, filler or accession of the same system has a different value, it is a different order sharing a number → AE 205 (checked by reading the order first; needs the FHIR server) |
+| ServiceRequest, DiagnosticReport | **any** of placer, filler, accession (OR search). If they match two different orders → 412 → AE: that needs a person. If they match one stored order whose placer, filler or accession of the same system has a different value, it is a different order sharing a number → AE 205 (checked by reading the order first; needs the FHIR server). Numbers the server already holds are kept: a message carrying a subset never erases the others, and a late NW adds the numbers it brings |
 | ImagingStudy | Study Instance UID |
 | Provenance | deterministic id from sending app + facility + MSH-10 |
 
