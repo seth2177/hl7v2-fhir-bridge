@@ -94,6 +94,10 @@ def hd_system(namespace: str | None, universal: str | None, universal_type: str 
     if universal and utype == "ISO":
         if re.fullmatch(r"[0-2](\.(0|[1-9]\d*))+", universal):
             return f"urn:oid:{universal}"
+        if not namespace:
+            system = cfg.identifier_system_base + quote(universal.lower(), safe="-._~")
+            ctx.warn(f"assigning authority {universal!r} is not a valid ISO OID; using {system}", where)
+            return system
         ctx.warn(f"assigning authority {universal!r} is not a valid ISO OID", where)
     if universal and utype == "UUID":
         return f"urn:uuid:{universal.lower()}"
