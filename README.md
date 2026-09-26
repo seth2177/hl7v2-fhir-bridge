@@ -139,7 +139,7 @@ run_demo.py      the whole workflow in one command
 
 ## Quality
 
-- 294 tests, plus `ruff`, run in CI on Linux and Windows with Python 3.11 and 3.12. CI also runs the demo, which
+- 304 tests, plus `ruff`, run in CI on Linux and Windows with Python 3.11 and 3.12. CI also runs the demo, which
   checks its own end state.
 - Every bundle the bridge produces is validated against the FHIR models (`fhir.resources` 8.3, R4B classes),
   against the required value sets the models don't enforce, and against the few FHIR invariants this mapper could
