@@ -5,10 +5,10 @@
 **Turn a radiology department's HL7 v2 feed into FHIR R4 without duplicating a patient, losing an order, or un-signing a report.**
 
 Hospitals will run HL7 v2 for decades. New systems, AI platforms included, want FHIR. This is a working reference
-implementation of the bridge between them for the radiology workflow. It receives ADT, orders (ORM/OMI) and
-results (ORU) over MLLP. Each message becomes one FHIR transaction Bundle of conditional requests, so a resend
-duplicates nothing and rolls nothing back. Every bundle is validated before it is sent, every resource is traced back to the message that
-wrote it, and the sender always gets an ACK it can act on.
+implementation of the bridge between them for the radiology workflow. It receives ADT, orders (ORM/OMI) and results
+(ORU) over MLLP. Each message becomes one FHIR transaction Bundle of conditional requests, so a resend duplicates
+nothing and rolls nothing back. Every bundle is validated before it is sent, every resource is traced back to the
+message that wrote it, and the sender always gets an ACK it can act on.
 
 ```mermaid
 flowchart LR
@@ -89,7 +89,7 @@ executed them (see *Scope and safety*).
 |---|---|---|
 | Engines resend messages, and a restart forgets what was seen | MSH-10 + content-hash dedupe re-ACKs a resend; every FHIR request is conditional, and orders and reports are checked against the server before writing, so a resend after a restart does not duplicate or roll back anything (the same ORM twice gives one ServiceRequest) | `bridge.py`, `mapping/bundle.py` |
 | One control id reused for a different message (counter reset) | processed, with a warning; dropping a real message is worse | `bridge.py` |
-| An assigning authority that isn't a namespace, OID, UUID or URI (DNS, local, a mistyped OID), or none at all | still gets its own system; a patient key with no authority at all is AE, never a bare-value search (which in FHIR matches any system) | `mapping/datatypes.py`, `mapping/patient.py` |
+| An assigning authority the bridge can't turn into a system (DNS, local, a mistyped OID), or none at all | an unrecognised one still gets its own system (warning); with none, `default_assigning_authority` applies, else a patient key is AE 101, never a bare-value search (which in FHIR matches any system) | `mapping/datatypes.py`, `mapping/patient.py` |
 | PID-3 repeats with several assigning authorities | the MRN is chosen by configured authority, then type MR; all identifiers kept; the match is on the chosen one | `mapping/patient.py` |
 | An old order's PID overwriting a newer A08 | only ADT upserts demographics; orders and results create-if-absent | `mapping/patient.py` |
 | ORU arrives before its ORM | the result creates the order; the late NW matches it and cannot re-open it | `mapping/results.py`, `orders.py` |
@@ -103,7 +103,7 @@ executed them (see *Scope and safety*).
 | Partial-precision timestamps (`2026`, `2026091514`, `202609151430`) | a date keeps its precision; a time is zero-filled to hh:mm:ss, because FHIR has no hour- or minute-only time; an instant without a time is omitted | `mapping/datatypes.py` |
 | Non-ASCII names (José Núñez), MSH-18 | declared charsets are decoded strictly: bytes that aren't valid in the declared set, or UTF-8 bytes under a single-byte declaration such as 8859/1, are AE, not a mangled name; undeclared: UTF-8, then cp1252 with a warning | `hl7/charset.py` |
 | `\r\n` or `\n` instead of `\r`; a bare LF inside report text | all three terminators accepted; a bare LF in a CR message is data, not a segment | `hl7/parser.py` |
-| Empty fields, trailing separators, `""` explicit nulls, padded values | trailing separators harmless; values stripped. An ADT is applied as a snapshot, so an empty PID field removes the element just as `""` does (documented deviation, [MAPPING §6](docs/MAPPING.md)) | `hl7/parser.py` |
+| Empty fields, trailing separators, `""` explicit nulls, padded values | trailing separators harmless; values stripped. An ADT is applied as a snapshot, so an empty PID field removes the element just as `""` does (documented deviation, [MAPPING §6](docs/MAPPING.md)) | `hl7/parser.py`, `mapping/patient.py` |
 | Escapes and formatted text (`\F\ \S\ \.br\ \H\ \Xhh\`); unescaped `^` in report text | escape handling per v2.5.1 2.7 (formatting commands mapped to line breaks and spaces, with caps); report text read whole, so a stray `^` survives | `hl7/escape.py`, `mapping/results.py` |
 | Z-segments (and OMI's IPC) | kept verbatim on the message's Provenance; ZDS-1 becomes the ImagingStudy UID (IHE convention) | `mapping/provenance.py` |
 | Malformed message | AR with ERR (location and HL7 0357 code); MSA-2 recovered even when the message does not parse | `hl7/ack.py` |
@@ -112,7 +112,7 @@ executed them (see *Scope and safety*).
 | A training or test feed (MSH-11 T or D) pointed at production | AR 202, never written; `accepted_processing_ids` says which ids this bridge takes | `bridge.py` |
 | Unsupported events (A03, SIU…) blocking the sender's queue | AA + warning by default, AR if configured | `bridge.py` |
 | Generated FHIR that is subtly wrong | every bundle validated before it leaves: fhir.resources models, required value sets, and the invariants this mapper could break (per-1, prr-1, bdl-7, no empty elements, 1 MB strings); invalid → AE, never sent. Other FHIR invariants and profiles are not checked | `validate.py` |
-| FHIR server down or refusing | down (connection errors, 5xx): retried with backoff, then AR, which v2.5.1 2.9.2.2 defines as "system down, resend later" (`transient_failure_ack = "AE"` for engines that only queue on AE). Refused (4xx): AE, not retried. Every ACK leaves within `ack_deadline_seconds` (default 25 s) | `bridge.py`, `sink.py` |
+| FHIR server down or refusing | down (connection errors, 5xx): retried with backoff, then AR (v2.5.1 2.9.2.2: rejected for reasons unrelated to content, such as system down) (`transient_failure_ack = "AE"` for engines that only queue on AE). Refused (4xx): AE, not retried. Every ACK leaves within `ack_deadline_seconds` (default 25 s) | `bridge.py`, `sink.py` |
 | MSH-10 used in a file name | sanitised: `../../etc/passwd` is data | `sink.py` |
 | "Which message wrote this?" | `meta.source` on every version (the message that last created or replaced it) plus one Provenance per message (what it asserted, MSH-10, sender, Z-segments) | `mapping/provenance.py` |
 
@@ -151,9 +151,9 @@ run_demo.py      the whole workflow in one command
   does 3,000), and the listener with concurrent random bytes, truncated frames and oversize frames. It found
   control bytes from MSH-3 echoed into the ACK (a `0x1C` there breaks the sender's MLLP framing), a garbage
   segment id echoed into ERR-2 (splitting the ERR segment), and NUL accepted as a field separator.
-- Adversarial testing, second round: I went through the output against the FHIR R4 spec, HL7 v2.5.1 chapter 2
+- Adversarial testing, second round: I checked the output against the FHIR R4 spec, HL7 v2.5.1 chapter 2
   and the v2-to-FHIR IG ConceptMaps, and attacked the listener and the ordering logic directly. That found the
-  serious ones: a patient identifier without a system that matched any patient, a resent final report that
+  serious bugs: a patient identifier without a system that matched any patient, a resent final report that
   replaced the correction, one order number shared by two patients' orders, a 16-byte `\.sp` escape that could
   exhaust memory, a run of `0x0B` bytes that stalled every connection, and code maps that didn't match the IG.
   Every fix has a regression test that fails on the old code.
@@ -165,14 +165,14 @@ workflow. It is not a certified interface engine. There is no general routing, n
 its own (the sender's queue and the AR/AE resend contract are the durability), no enhanced-mode acknowledgements,
 and no batch (FHS/BHS) over MLLP. Text OBX becomes the report; numeric OBX are not mapped to Observations.
 
-**Known limits.** The dedupe cache is in memory. Encounters are matched on the visit number alone, so a site
-that reuses visit numbers across facilities needs a per-facility system. The checks that read orders, reports and
-patients before writing (ordering, number conflicts, patient, merges) and the unknown-order warning need the FHIR
-server (the directory sink alone can't know server state). The bridge runs its own FHIR work one message at a
-time, so its connections can't race each other, but another system writing the same resources at the same moment
-can, and so can concurrent conditional creates on some servers. A40 writes both
-patient records rather than calling a server merge operation. The requests are written to the R4 spec and
-executed by the mock in the tests; they have not yet been run against HAPI or another production server.
+**Known limits.** The dedupe cache is in memory. Encounters are matched on the visit number alone, so a site that
+reuses visit numbers across facilities needs a per-facility system. The checks that read orders, reports and
+patients before writing (stale messages, number conflicts, wrong patient, merges) and the unknown-order warning
+need the FHIR server (the directory sink alone can't know server state). The bridge does its own FHIR work one
+message at a time, so its connections can't race each other, but another system writing the same resources at the
+same moment can, and so can concurrent conditional creates on some servers. A40 writes both patient records rather
+than calling a server merge operation. The requests are written to the R4 spec and executed by the mock in the
+tests; they have not yet been run against HAPI or another production server.
 
 **Security.** The MLLP listener has **no TLS and no authentication**, like most MLLP in hospitals. It binds to
 127.0.0.1 by default and belongs on a segmented interface network. To add TLS, pass an `ssl.SSLContext`

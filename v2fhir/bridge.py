@@ -175,7 +175,7 @@ class Bridge:
                 extra += self._reconcile(bundle)
                 if msg.message_type.upper() == "ADT" and msg.trigger.upper() != "A40":
                     extra += self._keep_merges(bundle)
-            # The content hash (MSH-7 ignored) keeps an identical resend on its own file but gives a reused control id a new one.
+            # Content hash (MSH-7 ignored): an identical resend overwrites its file; a reused control id gets a new one.
             path = self.dir_sink.write(bundle, f"{safe_name(msg.sending_app, msg.sending_facility, msg.control_id)}-{digest[:12]}") if self.dir_sink else None
             if self.fhir_sink:
                 entries = self.fhir_sink.post(bundle, deadline=self._deadline.at)
@@ -216,7 +216,7 @@ class Bridge:
                     a final, a status change that re-opens a cancelled order) -> the entry is dropped, with a warning
           merge     numbers the server has but this message lacks are kept, and so is an order's authoredOn;
                     a create-if-absent that matches an order lacking some of this message's numbers adds them
-        Read-then-write: safe for one connection sending in order; see README for concurrent senders."""
+        Read-then-write: FHIR work is serialised in the bridge, so only another writer can race it (see README)."""
         issues = []
         for e in list(bundle["entry"]):
             res, req = e["resource"], e["request"]
@@ -293,7 +293,7 @@ class Bridge:
 
     # ---- ACK helpers -------------------------------------------------------------------------------
     def _transient(self, text: str) -> HL7Error:
-        """System down or internal error: AR by default ("resend later", v2.5.1 2.9.2.2), AE if configured."""
+        """System down or internal error: AR by default (v2.5.1 2.9.2.2), so the sender resends later; AE if configured."""
         err = HL7Error(text, APPLICATION_INTERNAL_ERROR)
         err.ack_code = self.cfg.transient_failure_ack
         return err
