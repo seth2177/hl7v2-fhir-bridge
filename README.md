@@ -107,7 +107,7 @@ executed them (see *Scope and safety*).
 | Escapes and formatted text (`\F\ \S\ \.br\ \H\ \Xhh\`); unescaped `^` in report text | escape handling per v2.5.1 2.7 (formatting commands mapped to line breaks and spaces, with caps); report text read whole, so a stray `^` survives | `hl7/escape.py`, `mapping/results.py` |
 | Z-segments (and OMI's IPC) | kept verbatim on the message's Provenance; ZDS-1 becomes the ImagingStudy UID (IHE convention) | `mapping/provenance.py` |
 | Malformed message | AR with ERR (location and HL7 0357 code); MSA-2 recovered even when the message does not parse | `hl7/ack.py` |
-| Split frames, several messages per read, noise between frames, hang-ups | a streaming frame decoder; per-connection ordering; nothing can stop the listener | `mllp.py` |
+| Split frames, several messages per read, noise between frames, hang-ups | a streaming frame decoder (linear even on a flood of start blocks); per-connection ordering; idle timeout on reads and ACK writes; a connection limit (`max_connections`) at which the quietest idle connection is dropped. A stalled or silent peer is dropped, never the listener | `mllp.py` |
 | Huge message | 2 MB reports pass in linear time; above `max_message_bytes` only 4 KB are kept and an AR carries the right control id | `mllp.py` |
 | A training or test feed (MSH-11 T or D) pointed at production | AR 202, never written; `accepted_processing_ids` says which ids this bridge takes | `bridge.py` |
 | Unsupported events (A03, SIU…) blocking the sender's queue | AA + warning by default, AR if configured | `bridge.py` |

@@ -3,11 +3,15 @@ import asyncio
 import gc
 import logging
 import socket
+import subprocess
 import sys
+import textwrap
 import time
+from pathlib import Path
 
 import pytest
 
+import v2fhir
 from tools import ris_sim as r
 from v2fhir.bridge import Bridge
 from v2fhir.mllp import FrameDecoder, MLLPClient, MLLPServer, ServerThread, bridge_handler, frame
@@ -211,3 +215,69 @@ def test_stop_right_after_a_connect_is_prompt_and_leaves_no_pending_task(caplog)
         sys.unraisablehook = old_hook
     assert max(durations) < 1.0
     assert not [r for r in caplog.records if "destroyed but it is pending" in r.getMessage()] and not unraisable
+
+
+# ---- peers that hold resources: a stalled or silent peer is dropped, never the listener ------------------------
+BIG_ACK = b"MSH|^~\\&|V2FHIR|BRIDGE\rMSA|AA|1\r" + b"ERR|" + b"x" * 400_000 + b"\r"
+
+
+def test_connection_whose_peer_never_reads_acks_is_closed_after_idle_timeout():
+    """drain() had no timeout, so a peer that sends but never reads held its connection task forever."""
+    srv = ServerThread(MLLPServer(lambda fr: BIG_ACK, "127.0.0.1", 0, idle_timeout=1.0)).start()
+    s = socket.socket()
+    s.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 4096)
+    s.connect(("127.0.0.1", srv.port))
+    try:
+        s.settimeout(2)
+        for i in range(20):                               # sender keeps sending, never reads an ACK
+            try:
+                s.sendall(frame(b"MSH|^~\\&|A|B|C|D|2026||ADT^A04|%d|P|2.5\r" % i))
+            except (TimeoutError, OSError):
+                break
+        time.sleep(5)                                     # 5x idle_timeout with no progress at all
+        live = len(srv.server._tasks)
+        assert live == 0, f"{live} connection task(s) still blocked in drain() 5 s after a 1 s idle timeout"
+    finally:
+        s.close()
+        srv.stop()
+
+
+REPO = str(Path(v2fhir.__file__).resolve().parents[1])
+
+SERVE = textwrap.dedent(f"""
+    import asyncio, resource, sys
+    sys.dont_write_bytecode = True
+    sys.path.insert(0, {REPO!r})
+    resource.setrlimit(resource.RLIMIT_NOFILE, (64, resource.getrlimit(resource.RLIMIT_NOFILE)[1]))
+    from v2fhir.mllp import MLLPServer
+    server = MLLPServer(lambda fr: b"MSH|^~\\\\&|V2FHIR|BRIDGE\\rMSA|AA|OK1\\r", "127.0.0.1", 0)   # default idle_timeout 300 s
+    async def main():
+        await server.start()
+        print(server.port, flush=True)
+        await server.serve_forever()
+    asyncio.run(main())
+""")
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="uses resource.setrlimit")
+def test_seventy_silent_connections_do_not_lock_out_a_real_sender():
+    """With a 64-fd limit, 70 peers that connect and send nothing used to leave the listener unable to accept (EMFILE)."""
+    p = subprocess.Popen([sys.executable, "-c", SERVE], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    silent = []
+    try:
+        port = int(p.stdout.readline())
+        for _ in range(70):                                   # connect, send nothing, keep the socket open
+            silent.append(socket.create_connection(("127.0.0.1", port), timeout=5))
+        with socket.create_connection(("127.0.0.1", port), timeout=5) as sender:
+            sender.sendall(b"\x0bMSH|^~\\&|RIS|H|V2FHIR|B|2026||ADT^A04|OK1|P|2.5\r\x1c\r")
+            try:
+                ack = sender.recv(4096)
+            except TimeoutError:
+                pytest.fail("real sender got no ACK within 5 s: the listener stopped accepting (EMFILE) "
+                            "while 70 silent peers held their connections")
+        assert b"MSA|AA|OK1" in ack
+    finally:
+        for s in silent:
+            s.close()
+        p.kill()
+        p.wait()

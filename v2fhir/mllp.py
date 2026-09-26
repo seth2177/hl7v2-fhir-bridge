@@ -12,7 +12,8 @@ Search restarts where the last one stopped, so a 50 MB message arriving in 64 KB
 
 MLLPServer: asyncio listener. One task per connection; messages on a connection are handled strictly in
 order (HL7 ordering), each on a worker thread so a slow FHIR server never blocks other connections.
-No exception from a message or a connection can stop the listener.
+No exception from a message or a connection can stop the listener. A peer that goes quiet (reads or ACK writes
+stalled past idle_timeout) is dropped, and at max_connections the quietest idle connection makes room.
 """
 from __future__ import annotations
 
@@ -21,8 +22,9 @@ import contextlib
 import logging
 import socket
 import threading
+import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 log = logging.getLogger("v2fhir.mllp")
 
@@ -116,18 +118,21 @@ Handler = Callable[[Frame], "bytes | None"]
 
 class MLLPServer:
     def __init__(self, handler: Handler, host: str = "127.0.0.1", port: int = 2575, max_message_bytes: int = 10 * 1024 * 1024,
-                 idle_timeout: float = 300.0):
+                 idle_timeout: float = 300.0, max_connections: int = 128):
         self.handler = handler
         self.host, self.port = host, port
         self.max_message_bytes = max_message_bytes
         self.idle_timeout = idle_timeout
+        self.max_connections = max_connections
         self._server: asyncio.base_events.Server | None = None
         self._tasks: set[asyncio.Task] = set()
+        self._conns: dict[asyncio.Task, _Conn] = {}
         self._closing = False
         self.connections = 0
         self.messages = 0
 
     async def start(self) -> MLLPServer:
+        self.max_connections = min(self.max_connections, _fd_budget())
         self._server = await asyncio.start_server(self._on_connect, self.host, self.port, limit=2 ** 20)
         self.port = self._server.sockets[0].getsockname()[1]
         log.info("MLLP listening on %s:%d", self.host, self.port)
@@ -167,11 +172,35 @@ class MLLPServer:
         if self._closing:
             writer.close()
             return
-        t = asyncio.get_running_loop().create_task(self._client(reader, writer))
+        if len(self._tasks) >= self.max_connections and not self._evict_one(writer.get_extra_info("peername")):
+            log.warning("connection limit (%d) reached and every connection is busy; refusing %s",
+                        self.max_connections, writer.get_extra_info("peername"))
+            writer.close()
+            return
+        conn = _Conn(writer)
+        t = asyncio.get_running_loop().create_task(self._client(reader, writer, conn))
         self._tasks.add(t)
-        t.add_done_callback(self._tasks.discard)
+        self._conns[t] = conn
+        t.add_done_callback(self._forget)
 
-    async def _client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+    def _forget(self, t: asyncio.Task) -> None:
+        self._tasks.discard(t)
+        self._conns.pop(t, None)
+
+    def _evict_one(self, newcomer) -> bool:
+        """At the connection limit, drop the connection that has been quiet longest and isn't handling a message
+        (preferring ones that never sent a frame), so silent peers can't lock real senders out."""
+        idle = [(c.frames > 0, c.last, t) for t, c in self._conns.items() if not c.busy and not c.dropped]
+        if not idle:
+            return False
+        victim = min(idle, key=lambda x: (x[0], x[1]))[2]
+        log.warning("connection limit (%d) reached; dropping the quietest connection to admit %s", self.max_connections, newcomer)
+        self._conns[victim].drop()
+        victim.cancel()
+        return True
+
+    async def _client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter, conn: _Conn | None = None) -> None:
+        conn = conn or _Conn(writer)
         peer = writer.get_extra_info("peername")
         self.connections += 1
         decoder = FrameDecoder(self.max_message_bytes)
@@ -186,14 +215,24 @@ class MLLPServer:
                     break
                 for fr in decoder.feed(data):
                     self.messages += 1
+                    conn.busy = True
                     try:
                         ack = await asyncio.to_thread(self.handler, fr)
                     except Exception:  # noqa: BLE001 -- handler bug: log it, keep the connection and the listener
                         log.exception("MLLP handler failed")
                         ack = None
+                    finally:
+                        conn.busy = False
                     if ack:
                         writer.write(frame(ack))
-                        await writer.drain()
+                        try:                              # a peer that stops reading ACKs mustn't hold this forever
+                            await asyncio.wait_for(writer.drain(), self.idle_timeout)
+                        except TimeoutError:
+                            log.warning("closing %s: it stopped reading ACKs", peer)
+                            conn.drop()                   # close() would wait for the unsent ACK to flush
+                            return
+                    conn.frames += 1
+                    conn.last = time.monotonic()
         except (ConnectionError, OSError) as e:
             log.info("connection %s dropped: %s", peer, e)
         except Exception:  # noqa: BLE001
@@ -203,7 +242,31 @@ class MLLPServer:
                 log.warning("%s: %d bytes outside MLLP frames discarded", peer, decoder.discarded)
             writer.close()
             with contextlib.suppress(Exception):
-                await writer.wait_closed()
+                await asyncio.wait_for(writer.wait_closed(), 1)
+
+
+@dataclass
+class _Conn:
+    writer: asyncio.StreamWriter
+    last: float = field(default_factory=time.monotonic)      # connect time, then time of the last ACKed frame
+    frames: int = 0
+    busy: bool = False                                       # a message is being handled
+    dropped: bool = False
+
+    def drop(self) -> None:
+        """Close the socket now (its file descriptor is free at once), without waiting for unsent data."""
+        self.dropped = True
+        self.writer.transport.abort()
+
+
+def _fd_budget() -> int:
+    """Half the process's file-descriptor limit (POSIX): the listener must not run out of fds for the FHIR side."""
+    try:
+        import resource
+        soft = resource.getrlimit(resource.RLIMIT_NOFILE)[0]
+        return max(8, soft // 2) if soft > 0 else 1 << 30
+    except (ImportError, ValueError, OSError):
+        return 1 << 30
 
 
 class MLLPClient:

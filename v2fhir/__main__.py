@@ -57,7 +57,7 @@ def cmd_serve(a) -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     logging.getLogger("httpx").setLevel(logging.WARNING)
     bridge = Bridge(cfg)
-    server = MLLPServer(bridge_handler(bridge), cfg.host, cfg.port, cfg.max_message_bytes, cfg.idle_timeout_seconds)
+    server = MLLPServer(bridge_handler(bridge), cfg.host, cfg.port, cfg.max_message_bytes, cfg.idle_timeout_seconds, cfg.max_connections)
     print(f"MLLP listener on {cfg.host}:{cfg.port}  ->  {cfg.fhir_base_url or '(no FHIR server)'}  +  {cfg.out_dir or '(no bundle dir)'}")
     try:
         with asyncio.Runner(loop_factory=loop_factory) as runner:
