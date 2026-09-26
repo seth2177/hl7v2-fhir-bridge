@@ -7,7 +7,9 @@ Which order is it? (the conditional match)
   accession -- goes into the search as an OR: identifier=placer,filler,accession. Systems rarely send the
   same subset (the RIS knows all three, a reporting system may only echo the filler number), and a match
   on any of them finds the order. If they point at two different orders the server answers 412 and the
-  message is NAKed: that needs a human, not a guess. The bundle-internal key is placer -> filler -> accession.
+  message is NAKed: that needs a human, not a guess. If they point at one stored order but a number of the
+  same type and system disagrees, it is a different order sharing a number: the bridge reads the order
+  first and NAKs with 205 (bridge._reconcile). The bundle-internal key is placer -> filler -> accession.
 
 Accession number: IHE Scheduled Workflow carries it in OBR-18 for ORM^O01 and in IPC-1 for OMI^O23.
 The Study Instance UID is ZDS-1 (ORM) or IPC-3 (OMI); it is kept in provenance with the other Z data

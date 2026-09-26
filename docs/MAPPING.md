@@ -185,7 +185,7 @@ Instance UID).
 | Patient | the MRN: PID-3 repetition of type MR from the first `mrn_authorities` entry that has one; else the first MR; else the first PI or the first identifier at all (with a warning). No PID-3 → AE 101 |
 | Encounter | PV1-19 |
 | Practitioner | XCN-1 / CNN-1 with its assigning authority. No id → no resource, display name only (it could never be matched again) |
-| ServiceRequest, DiagnosticReport | **any** of placer, filler, accession (OR search). If they match two different orders → 412 → AE: that needs a person |
+| ServiceRequest, DiagnosticReport | **any** of placer, filler, accession (OR search). If they match two different orders → 412 → AE: that needs a person. If they match one stored order whose placer, filler or accession of the same system has a different value, it is a different order sharing a number → AE 205 (checked by reading the order first; needs the FHIR server) |
 | ImagingStudy | Study Instance UID |
 | Provenance | deterministic id from sending app + facility + MSH-10 |
 

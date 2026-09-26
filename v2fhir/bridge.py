@@ -23,7 +23,7 @@ from pathlib import Path
 
 from .config import Config
 from .convert import UnsupportedMessage, convert
-from .errors import APPLICATION_INTERNAL_ERROR, UNKNOWN_KEY_IDENTIFIER, UNSUPPORTED_VERSION_ID, HL7Error, Issue, Location, RejectError
+from .errors import APPLICATION_INTERNAL_ERROR, DUPLICATE_KEY_IDENTIFIER, UNKNOWN_KEY_IDENTIFIER, UNSUPPORTED_VERSION_ID, HL7Error, Issue, Location, RejectError
 from .hl7.ack import build_ack, head_fields
 from .hl7.parser import Message, parse_bytes
 from .mapping import tables as T
@@ -146,6 +146,8 @@ class Bridge:
             path = self.dir_sink.write(bundle, safe_name(msg.sending_app, msg.control_id)) if self.dir_sink else None
             if self.fhir_sink:
                 entries = self.fhir_sink.post(bundle)
+        except HL7Error as e:
+            return self._nak(msg, e, bundle=bundle, path=path)
         except FhirError as e:
             has_patch = any(en["request"]["method"] == "PATCH" for en in bundle["entry"])
             if has_patch and e.status == 404:
@@ -165,20 +167,34 @@ class Bridge:
         return self._ack(msg, "AA", issues, entries=entries, bundle=bundle, path=path)
 
     def _reconcile(self, bundle: dict) -> list[Issue]:
-        """Orders and reports: read what the server holds before writing, because a conditional request cannot
-        say "only if newer". An older message that would undo a newer state (a final over a correction, a late
-        preliminary over a final, a status change that re-opens a cancelled order) is dropped, with a warning.
+        """Orders and reports: read what the server holds before writing, because a conditional request can say
+        neither "only if newer" nor "this single match is really a different order". For each ServiceRequest or
+        DiagnosticReport entry that matches exactly one stored resource:
+          conflict  a stored order number of the same type and system has another value: a different order
+                    shares one of the numbers -> AE 205, a person has to look
+          stale     an older message would undo newer state (a final over a correction, a late preliminary over
+                    a final, a status change that re-opens a cancelled order) -> the entry is dropped, with a warning
         Read-then-write: safe for one connection sending in order; see README for concurrent senders."""
         issues = []
         for e in list(bundle["entry"]):
             res, req = e["resource"], e["request"]
             rt = req["url"].split("?")[0].split("/")[0]
-            if rt not in ("ServiceRequest", "DiagnosticReport") or req["method"] not in ("PUT", "PATCH") or "?" not in req["url"]:
+            if rt not in ("ServiceRequest", "DiagnosticReport"):
                 continue
-            current = self.fhir_sink.search(req["url"])
+            query = f"{rt}?{req['ifNoneExist']}" if req["method"] == "POST" else req["url"]
+            if "?" not in query:
+                continue
+            current = self.fhir_sink.search(query)
             if len(current) != 1:
                 continue                      # none: it is created; several: the server answers 412 -> AE
-            stale = _stale(rt, req, res, current[0])
+            cur = current[0]
+            if req["method"] != "PATCH":
+                clash = _conflicting_number(res.get("identifier", []), cur.get("identifier", []))
+                if clash:
+                    raise HL7Error(f"{rt}/{cur.get('id')} has {clash}: a different order shares one of these numbers; "
+                                   "needs manual reconciliation"[:250], DUPLICATE_KEY_IDENTIFIER,
+                                   Location("ORC" if rt == "ServiceRequest" else "OBR", 1, 2))
+            stale = _stale(rt, req, res, cur)
             if stale:
                 _drop_entry(bundle, e)
                 issues.append(Issue("0", stale, Location("OBR", 1, 25) if rt == "DiagnosticReport" else Location("ORC", 1, 1), "W"))
@@ -225,6 +241,20 @@ def _status_change_for_unknown_order(bundle: dict, entries: list[EntryResult]) -
             out.append(Issue(UNKNOWN_KEY_IDENTIFIER, f"status change ({r.get('status')}) for unknown order {ident}; created it",
                              Location("ORC", 1, 2), "W"))
     return out
+
+
+def _id_type(ident: dict) -> str | None:
+    return ((ident.get("type") or {}).get("coding") or [{}])[0].get("code")
+
+
+def _conflicting_number(incoming: list[dict], stored: list[dict]) -> str | None:
+    """Same identifier type (PLAC/FILL/ACSN) and system, different value: two different orders."""
+    have = {(_id_type(i), i.get("system")): i.get("value") for i in stored if _id_type(i)}
+    for i in incoming:
+        k = (_id_type(i), i.get("system"))
+        if k in have and have[k] != i.get("value"):
+            return f"{k[0]} {have[k]}, this message {i.get('value')}"
+    return None
 
 
 def _older(a: str | None, b: str | None) -> bool:

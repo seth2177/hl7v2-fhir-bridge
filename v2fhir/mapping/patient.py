@@ -1,7 +1,7 @@
 """PID -> Patient, PV1 -> Encounter, XCN -> Practitioner, MRG -> Patient.link (merge)."""
 from __future__ import annotations
 
-from ..errors import REQUIRED_FIELD_MISSING, MappingError
+from ..errors import DUPLICATE_KEY_IDENTIFIER, REQUIRED_FIELD_MISSING, MappingError
 from ..hl7.parser import Segment
 from . import datatypes as dt
 from . import tables as T
@@ -186,7 +186,7 @@ def add_merge(pid: Segment, mrg: Segment, ctx: Ctx) -> None:
     old_ids = identifiers(mrg, 1, ctx)
     old_mrn = choose_mrn(old_ids, ctx, mrg.loc(1))
     if (old_mrn.get("system"), old_mrn["value"]) == (s_mrn.get("system"), s_mrn["value"]):
-        raise MappingError("MRG-1 names the same patient as PID-3; nothing to merge", "205", mrg.loc(1))
+        raise MappingError("MRG-1 names the same patient as PID-3; nothing to merge", DUPLICATE_KEY_IDENTIFIER, mrg.loc(1))
     old: dict = {"resourceType": "Patient", "meta": ctx.meta(), "identifier": [i for i, _ in old_ids], "active": False}
     old_name = [n for n in (dt.xpn(r) for r in mrg.reps(7)) if n] or survivor.get("name")
     if old_name:
