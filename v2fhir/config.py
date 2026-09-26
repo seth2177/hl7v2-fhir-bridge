@@ -21,6 +21,7 @@ class Config:
 
     # hl7
     accepted_versions: tuple[str, ...] = ("2.3", "2.3.1", "2.4", "2.5", "2.5.1")
+    accepted_processing_ids: tuple[str, ...] = ("P",)   # MSH-11: P production, T training, D debugging
     default_charset: str = "utf-8"
     fallback_charsets: tuple[str, ...] = ("cp1252", "latin-1")
     unsupported_messages: str = "ack"          # "ack": AA + warning (don't block the sender's queue); "reject": AR

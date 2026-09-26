@@ -109,6 +109,7 @@ executed them (see *Scope and safety*).
 | Malformed message | AR with ERR (location and HL7 0357 code); MSA-2 recovered even when the message does not parse | `hl7/ack.py` |
 | Split frames, several messages per read, noise between frames, hang-ups | a streaming frame decoder; per-connection ordering; nothing can stop the listener | `mllp.py` |
 | Huge message | 2 MB reports pass in linear time; above `max_message_bytes` only 4 KB are kept and an AR carries the right control id | `mllp.py` |
+| A training or test feed (MSH-11 T or D) pointed at production | AR 202, never written; `accepted_processing_ids` says which ids this bridge takes | `bridge.py` |
 | Unsupported events (A03, SIU…) blocking the sender's queue | AA + warning by default, AR if configured | `bridge.py` |
 | Generated FHIR that is subtly wrong | every bundle validated (fhir.resources + required value sets) before it leaves; invalid → AE, never sent | `validate.py` |
 | FHIR server down or refusing | AE, so the sender keeps the message; 5xx and connection errors retried with backoff, 4xx not | `sink.py` |

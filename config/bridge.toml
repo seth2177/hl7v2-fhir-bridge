@@ -8,6 +8,7 @@ idle_timeout_seconds = 300
 
 [hl7]
 accepted_versions = ["2.3", "2.3.1", "2.4", "2.5", "2.5.1"]
+accepted_processing_ids = ["P"]           # MSH-11; a test bridge would take ["T"]
 default_charset = "utf-8"                 # when MSH-18 is empty ...
 fallback_charsets = ["cp1252", "latin-1"] # ... and the bytes are not UTF-8
 unsupported_messages = "ack"              # ADT^A03 etc: "ack" = AA + warning, "reject" = AR

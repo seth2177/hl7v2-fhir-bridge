@@ -118,3 +118,16 @@ def test_bom_prefixed_batch_file_yields_only_the_messages():
            b"MSH|^~\\&|RIS|H|V|B|2026||ADT^A04|C1|P|2.5.1\r\nPID|1||1^^^H^MR\r\nBTS|1\r\nFTS|1\r\n")
     parts = split_batch_bytes(raw)
     assert len(parts) == 1 and parts[0].startswith(b"MSH|")
+
+
+# ---- MSH-11 processing id (table 0103) -------------------------------------------------------------------
+@pytest.mark.parametrize("processing, code", [("T", "202"), ("D", "202"), ("X", "202"), ("", "101")])
+def test_training_debug_or_missing_processing_id_is_rejected(cfg, processing, code):
+    """A training (T) or debugging (D) feed pointed at production must not be written to the FHIR server."""
+    msg = r.adt("A04", "P1").replace("|P1|P|", f"|P1|{processing}|", 1)
+    result = Bridge(cfg).handle(msg.encode())
+    assert result.ack_code == "AR" and result.issues[0].code == code and result.bundle is None
+
+
+def test_production_processing_id_with_a_mode_is_accepted(cfg):
+    assert Bridge(cfg).handle(r.adt("A04", "P2").replace("|P2|P|", "|P2|P^T|", 1).encode()).ack_code == "AA"
