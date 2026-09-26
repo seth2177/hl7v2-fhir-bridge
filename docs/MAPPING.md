@@ -212,11 +212,12 @@ sender, because the ORU comes from a different application than the ORM and must
 | v2 | FHIR date | FHIR dateTime | FHIR instant |
 |---|---|---|---|
 | `2026` / `202609` / `20260915` | `2026` / `2026-09` / `2026-09-15` | same | omitted + warning |
-| `202609151430-0500` | `2026-09-15` | `2026-09-15T14:30:00-05:00` (seconds padded) | same |
+| `2026091514-0500` | `2026-09-15` | `2026-09-15T14:00:00-05:00` (minutes and seconds zero-filled) | same |
+| `202609151430-0500` | `2026-09-15` | `2026-09-15T14:30:00-05:00` (seconds zero-filled) | same |
 | `20260915143015.1234+0530` | `2026-09-15` | `2026-09-15T14:30:15.1234+05:30` | same |
 | `20260915143000` (no offset) | `2026-09-15` | offset from `default_timezone`, DST-correct (`-06:00` in January, `-05:00` in July), one warning per message | same |
 | no offset and `default_timezone = ""` | `2026-09-15` | `2026-09-15` (truncated to the date, never a made-up offset) | omitted |
-| `20260230`, `20261345`, `+2500` | omitted + warning | | |
+| `20260230`, `20261345`, `+2500`, `+1430` (FHIR allows at most ±14:00) | omitted + warning | | |
 
 A FHIR dateTime with a time **must** carry an offset. `fhir.resources` rejects one without, and a test checks
 exactly that (`tests/test_validation_ack.py`).
