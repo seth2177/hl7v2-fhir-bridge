@@ -85,3 +85,20 @@ def test_sc_with_unknown_orc5_is_table_value_not_found(cfg):
     with pytest.raises(HL7Error) as exc:
         convert(parse_bytes(raw.replace(b"||CM|", b"||ZZ|")), cfg)
     assert exc.value.issue.code == "103"
+
+
+# ---- XTN-2 / XTN-3 (tables 0201 / 0202) -> ContactPoint --------------------------------------------------
+def _xtn(value: str) -> dict:
+    msg = parse(f"MSH|^~\\&|A|F|B|G|2026||ADT^A04|X1|P|2.5.1\rPID|1||1^^^H^MR||X^Y||||||||{value}\r")
+    return dt.xtn(msg.seg("PID").rep(13), "home")
+
+
+def test_unknown_telecom_codes_are_not_guessed():
+    assert "use" not in _xtn("^EMR^PH^^^555^1234567")                  # EMR (emergency number) is not "home"
+    assert _xtn("^PRN^PAGERX^^^555^1234567")["system"] == "other"       # unknown equipment is not "phone"
+    assert _xtn("^PRS^PH^^^555^1234567")["use"] == "mobile"
+
+
+def test_empty_use_and_net_still_take_the_field_default():
+    assert _xtn("^^PH^^^555^1234567")["use"] == "home"
+    assert _xtn("^NET^Internet^a@example.org") == {"system": "email", "value": "a@example.org", "use": "home"}

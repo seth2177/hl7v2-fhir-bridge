@@ -229,8 +229,13 @@ def xtn(rep: Rep, default_use: str | None) -> dict | None:
             value = (f"({area}) " if area else "") + local + (f" x{ext}" if ext else "")
         if not value:
             return None
-        cp["system"], cp["value"] = T.TELECOM_SYSTEM_0202.get(equip, "phone"), value
-    use = "mobile" if equip == "CP" else T.TELECOM_USE_0201.get(use_code or "", default_use)
+        cp["system"], cp["value"] = (T.TELECOM_SYSTEM_0202.get(equip, "other") if equip else "phone"), value
+    if equip == "CP":
+        use = "mobile"
+    elif use_code and use_code != "NET":
+        use = T.TELECOM_USE_0201.get(use_code)          # an unknown use code is left out, not guessed
+    else:
+        use = default_use
     if use:
         cp["use"] = use
     return cp
