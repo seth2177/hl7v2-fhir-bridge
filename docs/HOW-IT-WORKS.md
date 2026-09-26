@@ -63,8 +63,10 @@ from four threads, then checks that it still ACKs a good message.
 
 **Character set first.** MSH is always ASCII, so MSH-18 can be read before decoding. If it is declared, the bytes
 are decoded strictly: MSH-18 saying ASCII while the bytes are Latin-1 is an **AE**, because guessing would store
-"MU?OZ" on a real patient. If MSH-18 is empty (most senders), the bridge tries UTF-8, then cp1252, then
-Latin-1, and warns about which one worked.
+"MU?OZ" on a real patient. Latin-1 accepts every byte, so a sender that says 8859/1 but sends UTF-8 can't
+be caught that way; the bridge checks whether the bytes are valid multi-byte UTF-8 instead, and that is an AE
+too. If MSH-18 is empty (most senders), the bridge tries UTF-8, then cp1252, then Latin-1, and warns when it
+had to fall back.
 
 **Then structure.** Delimiters come from MSH-1/MSH-2 and are never assumed. Segments end at CR. If the message
 contains no CR, LF is taken as the terminator; if it does, a bare LF is data (a line break a reporting system

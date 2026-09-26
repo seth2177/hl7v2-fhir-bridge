@@ -143,3 +143,14 @@ def test_batch_split_keeps_each_message_bytes_intact():
     assert len(parts) == 2
     assert parse_bytes(parts[0]).seg("PID").get(5) == "NÚÑEZ" and parse_bytes(parts[1]).seg("PID").get(5) == "NÚÑEZ"
     assert len(split_batch(MSH + "\n" + MSH + "\n")) == 2
+
+
+def test_utf8_bytes_under_a_single_byte_declaration_are_refused():
+    """8859/1 accepts every byte, so UTF-8 sent under that label would be stored as NÃ\x9aÃ\x91EZ with AA."""
+    msg = ("MSH|^~\\&|RIS|H|V2FHIR|BRIDGE|20260101120000-0500||ADT^A04^ADT_A01|C1|P|2.5.1||||||8859/1\r"
+           "EVN|A04\rPID|1||123^^^SYNTH_HOSP^MR||NÚÑEZ^JOSÉ\r")
+    with pytest.raises(CharsetError):
+        parse_bytes(msg.encode("utf-8"))
+    with pytest.raises(CharsetError):
+        parse_bytes(b"\xef\xbb\xbf" + msg.encode("latin-1"))
+    assert parse_bytes(msg.encode("latin-1")).seg("PID").get(5) == "NÚÑEZ"      # real Latin-1 still decodes
