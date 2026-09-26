@@ -19,7 +19,7 @@ from .config import load_config
 from .convert import convert
 from .errors import HL7Error
 from .hl7.parser import parse_bytes, split_batch_bytes
-from .mllp import MLLPClient, MLLPServer, bridge_handler
+from .mllp import MLLPClient, MLLPServer, bridge_handler, loop_factory
 from .validate import BundleInvalid, validate_bundle
 
 DEFAULT_CONFIG = Path(__file__).resolve().parent.parent / "config" / "bridge.toml"
@@ -60,7 +60,8 @@ def cmd_serve(a) -> int:
     server = MLLPServer(bridge_handler(bridge), cfg.host, cfg.port, cfg.max_message_bytes, cfg.idle_timeout_seconds)
     print(f"MLLP listener on {cfg.host}:{cfg.port}  ->  {cfg.fhir_base_url or '(no FHIR server)'}  +  {cfg.out_dir or '(no bundle dir)'}")
     try:
-        asyncio.run(server.serve_forever())
+        with asyncio.Runner(loop_factory=loop_factory) as runner:
+            runner.run(server.serve_forever())
     except KeyboardInterrupt:
         pass
     finally:
