@@ -57,7 +57,10 @@ def head_fields(raw: bytes | str) -> dict[str, str]:
         out = {"fs": fs if good_enc else "|", "enc": enc if good_enc else ""}
         for n in (3, 4, 5, 6, 10, 11, 12, 18):
             if n - 1 < len(parts):
-                out[str(n)] = parts[n - 1].split(comp)[0][:40] if n in (10, 11, 12, 18) else parts[n - 1][:180]
+                if n in (12, 18):
+                    out[str(n)] = parts[n - 1].split(comp)[0][:40]
+                else:                                     # echoed exactly as sent (still encoded)
+                    out[str(n)] = parts[n - 1][:199 if n in (10, 11) else 180]
         if len(parts) > 8:
             out["9.2"] = (parts[8].split(comp) + ["", ""])[1][:3]
         return out
@@ -75,7 +78,7 @@ def build_ack(code: str, *, msg: Message | None = None, head: dict[str, str] | N
         m = msg.msh
         send_app, send_fac = m.raw(3), m.raw(4)
         version = msg.version or default_version
-        control, processing, trigger, charset = msg.control_id, m.get(11) or "P", msg.trigger, m.raw(18)
+        control, processing, trigger, charset = m.raw(10).rstrip(), m.raw(11) or "P", msg.trigger, m.raw(18)
         rcv_app, rcv_fac = m.raw(5) or receiving_app, m.raw(6) or receiving_facility
     else:
         head = head or {}
@@ -96,12 +99,13 @@ def build_ack(code: str, *, msg: Message | None = None, head: dict[str, str] | N
 
     v25 = _version_tuple(version) >= (2, 5)
     msg_type = f"ACK{cs}{esc(trigger)}" + (f"{cs}ACK" if _version_tuple(version) >= (2, 3, 1) else "")
-    msh = ["MSH", d.raw, rcv_app, rcv_fac, send_app, send_fac, _ts(now), "", msg_type, _new_control_id(), esc(processing), esc(version)]
+    # MSH-10 and MSH-11 are echoed exactly as the sender encoded them (MSA-2 must equal MSH-10 byte for byte)
+    msh = ["MSH", d.raw, rcv_app, rcv_fac, send_app, send_fac, _ts(now), "", msg_type, _new_control_id(), processing, esc(version)]
     if charset:
         msh += [""] * 5 + [charset]
     errors = [i for i in issues if i.severity == "E"]
     msa_text = text or (str(errors[0]) if errors else "")
-    segs = [fs.join(msh), fs.join(["MSA", code, esc(control)] + ([esc(msa_text[:80])] if msa_text and code != "AA" else []))]
+    segs = [fs.join(msh), fs.join(["MSA", code, control] + ([esc(msa_text[:80])] if msa_text and code != "AA" else []))]
     for issue in issues:
         if issue.severity != "E" and not v25:
             continue

@@ -131,3 +131,19 @@ def test_training_debug_or_missing_processing_id_is_rejected(cfg, processing, co
 
 def test_production_processing_id_with_a_mode_is_accepted(cfg):
     assert Bridge(cfg).handle(r.adt("A04", "P2").replace("|P2|P|", "|P2|P^T|", 1).encode()).ack_code == "AA"
+
+
+# ---- MSA-2 and MSH-11 are echoed as sent; ACK control ids stay unique ------------------------------------------
+ECHO = "MSH|^~\\&|RIS|H|V|B|2026||ADT^A04|{cid}|{pid}|2.5.1\r"
+
+
+def test_msa2_is_the_inbound_msh10_as_sent_on_both_ack_paths():
+    good = ECHO.format(cid="A\\T\\B", pid="P")
+    assert build_ack("AA", msg=parse(good)).split("\r")[1].split("|")[2] == "A\\T\\B"
+    bad = good + "pid\r"                                        # lower-case segment id: does not parse
+    assert build_ack("AR", head=head_fields(bad)).split("\r")[1].split("|")[2] == "A\\T\\B"
+
+
+def test_msh11_processing_mode_is_echoed():
+    assert build_ack("AA", msg=parse(ECHO.format(cid="C1", pid="P^T"))).split("\r")[0].split("|")[10] == "P^T"
+
