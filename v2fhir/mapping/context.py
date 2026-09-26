@@ -31,7 +31,9 @@ class Ctx:
         return self._tz
 
     def warn(self, text: str, where: Location | None = None, code: str = "0") -> None:
-        self.warnings.append(Issue(code, text, where, "W"))
+        issue = Issue(code, text, where, "W")
+        if issue not in self.warnings:       # the same provider in PV1-7 and ORC-12 would warn twice; the ACK has 5 ERRs
+            self.warnings.append(issue)
 
     def note_assumed_tz(self, value: str, where: Location | None) -> None:
         self._tz_assumed += 1

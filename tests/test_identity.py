@@ -287,3 +287,13 @@ def test_same_provider_with_an_initial_or_a_full_given_name_is_one_practitioner(
     conv = convert(parse(_report_with_providers("1001^SMITH^JOHN^^^^^^SYNTH_PRV", "1001^SMITH^J^^^^^^SYNTH_PRV")), _cfg(), NOW)
     sr = next(e["resource"] for e in conv.bundle["entry"] if e["resource"]["resourceType"] == "ServiceRequest")
     assert "reference" in sr["requester"], [w.text for w in conv.warnings]
+
+
+
+def test_one_provider_or_authority_problem_gives_one_warning():
+    """The ACK carries at most 5 ERR segments; a repeated warning pushes real ones out."""
+    conv = convert(parse(_report_with_providers("1001^SMITH^JOHN", "1001^SMITH^JOHN")), _cfg(), NOW)
+    texts = [w.text for w in conv.warnings if "no assigning authority" in w.text]
+    assert len(texts) == 1, texts
+    conv = convert(parse(adt("C1", "1001^^^&2.16.840.1.113883.19.05&ISO^MR", "DOE", "V1^^^SYNTH_HOSP^VN")), _cfg(), NOW)
+    assert len([w for w in conv.warnings if "2.16.840.1.113883.19.05" in w.text]) == 1
