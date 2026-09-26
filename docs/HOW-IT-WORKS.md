@@ -38,7 +38,7 @@ The two things that matter most for an interface:
 2. **Inside a transaction, resources point at each other by temporary ids** (`urn:uuid:…`). The
    ServiceRequest's `subject` points at the Patient entry's `urn:uuid`. The server first works out which real
    Patient that is (existing or new), then rewrites the reference. So the bridge never needs to know a
-   server id, and it never has to query before writing.
+   server id. (It does read orders and reports before writing them, for a different reason: see Hop 5.)
 
 ---
 
@@ -117,8 +117,11 @@ It is written to `data/bundles/<sender>_<control id>-<hash>.json`. The name is s
 from the network and `../../x` is data, not a path. Then it is POSTed to the FHIR server. Connection errors
 and 5xx are retried with backoff; 4xx are not (the same bundle would be refused again).
 
-Before the POST, a *preliminary* report is checked against the server. If the current report is already
-final, the stale entry is dropped: a retried old message must not un-sign a report.
+Before the POST, every order and report entry is checked against what the server holds, because a
+conditional PUT cannot say "only if newer". A report never goes down in status (a late preliminary after the
+final, a resent final after the correction, a queued cancel after the final), and at the same status the
+report with the older OBR-22 loses. An order that is completed or revoked is not re-opened by an older
+status message. The stale entry is dropped with a warning: a retried old message must not un-sign a report.
 
 ## Hop 6: the ACK (`v2fhir/hl7/ack.py`)
 

@@ -238,6 +238,7 @@ charset switching) are dropped. Unknown or unterminated sequences are kept liter
 | Unmappable Encounter class | `v3-NullFlavor#UNK` | `Encounter.class` is 1..1 in R4 |
 | Modality on an order | `ServiceRequest.orderDetail` (DICOM coding) | R4 ServiceRequest has no modality element |
 | A40 | upsert both records, linked | FHIR R4 has no standard merge operation. If the server offers one, use it instead |
-| Late preliminary after final | the DiagnosticReport entry is dropped (warning) after reading the current report | a conditional PUT cannot say "only if not final"; needs the FHIR server, not the directory sink |
+| Older report after a newer one | the DiagnosticReport entry is dropped (warning) after reading the current report: status rank registered < partial < preliminary, cancelled < final < amended, corrected, appended < entered-in-error; at equal rank the older `issued` (OBR-22) loses | a conditional PUT cannot say "only if newer"; table 0123 F "can only be changed with a corrected result"; needs the FHIR server, not the directory sink |
+| Status change on a finished order | completed may still become revoked or entered-in-error, revoked only entered-in-error; anything else is dropped (warning) after reading the current order | R4 request-status: completed and revoked mean no further activity; stops a resent SC or RL re-opening a cancelled order |
 | Status-only order messages | FHIRPath Patch of `status` | a full PUT from an ORC-only cancel would erase the procedure and requester |
 | Unsupported events (A03, SIU…) | AA + warning by default | a NAK blocks the sender's queue for a message nobody needs; `reject` is one setting away |

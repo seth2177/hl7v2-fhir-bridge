@@ -87,7 +87,7 @@ executed them (see *Scope and safety*).
 
 | Real-world problem | How the bridge handles it | Where |
 |---|---|---|
-| Engines resend messages, and a restart forgets what was seen | MSH-10 + content-hash dedupe re-ACKs a resend; every FHIR request is conditional, so a resend after a restart changes nothing either (the same ORM twice gives one ServiceRequest) | `bridge.py`, `mapping/bundle.py` |
+| Engines resend messages, and a restart forgets what was seen | MSH-10 + content-hash dedupe re-ACKs a resend; every FHIR request is conditional, and orders and reports are checked against the server before writing, so a resend after a restart does not duplicate or roll back anything (the same ORM twice gives one ServiceRequest) | `bridge.py`, `mapping/bundle.py` |
 | One control id reused for a different message (counter reset) | processed, with a warning; dropping a real message is worse | `bridge.py` |
 | PID-3 repeats with several assigning authorities | the MRN is chosen by configured authority, then type MR; all identifiers kept; the match is on the chosen one | `mapping/patient.py` |
 | An old order's PID overwriting a newer A08 | only ADT upserts demographics; orders and results create-if-absent | `mapping/patient.py` |
@@ -95,7 +95,8 @@ executed them (see *Scope and safety*).
 | Placer, filler and accession numbers arrive in different subsets from different systems | orders and reports match on **any** of them (`identifier=a,b,c`); two different orders matching is AE, not a guess | `mapping/orders.py` |
 | Cancel for an order the server never saw | ORC-only cancel: AE 204 (unknown key). Full cancel: recorded as revoked, AA with warning | `bridge.py` |
 | ORC-only cancel wiping the order | status-only messages become a FHIRPath PATCH of `status`, not a PUT | `mapping/orders.py` |
-| A late preliminary un-signing a final report | reads the current report first and drops the stale entry (warning) | `bridge.py` |
+| An old result overwriting a newer report (a late preliminary after the final, a resent final after the correction, a queued cancel after the final) | reads the current report first; a lower status never replaces a higher one, and at equal status the older OBR-22 loses; the stale entry is dropped with a warning | `bridge.py` |
+| An old status message re-opening a finished order (a resent SC after the cancel) | reads the current order first; completed and revoked are terminal, so the late status is dropped with a warning | `bridge.py` |
 | Timestamps without a time zone | local time in `default_timezone`, DST-correct, with a warning; no zone configured → date only, never a made-up offset | `mapping/datatypes.py` |
 | Partial-precision timestamps (`2026`, `202609151430`) | mapped at their real precision (seconds padded only where FHIR requires them) | `mapping/datatypes.py` |
 | Non-ASCII names (José Núñez), MSH-18 | declared charsets are decoded strictly (a mismatch is AE, not a mangled name); undeclared: UTF-8, then cp1252 with a warning | `hl7/charset.py` |
@@ -158,7 +159,7 @@ its own (the sender's queue and the AE/resend contract are the durability), no e
 and no batch (FHS/BHS) over MLLP. Text OBX becomes the report; numeric OBX are not mapped to Observations.
 
 **Known limits.** The dedupe cache is in memory. Encounters are matched on the visit number alone, so a site
-that reuses visit numbers across facilities needs a per-facility system. The late-preliminary guard and the
+that reuses visit numbers across facilities needs a per-facility system. The report and order ordering guard and the
 unknown-order warning need the FHIR server (the directory sink alone can't know server state). They read
 before writing, which is safe for one connection sending in order. Two connections sending updates to the same
 report at the same moment can race, and so can concurrent conditional creates on some servers. A40 writes both

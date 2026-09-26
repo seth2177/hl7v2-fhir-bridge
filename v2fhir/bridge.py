@@ -26,13 +26,13 @@ from .convert import UnsupportedMessage, convert
 from .errors import APPLICATION_INTERNAL_ERROR, UNKNOWN_KEY_IDENTIFIER, UNSUPPORTED_VERSION_ID, HL7Error, Issue, Location, RejectError
 from .hl7.ack import build_ack, head_fields
 from .hl7.parser import Message, parse_bytes
+from .mapping import tables as T
+from .mapping.bundle import token
 from .sink import DirectorySink, EntryResult, FhirError, FhirSink, safe_name
 from .validate import BundleInvalid, validate_bundle
 
 log = logging.getLogger("v2fhir")
 MAX_ERR_SEGMENTS = 5
-EARLY_REPORT = {"registered", "partial", "preliminary"}
-SIGNED_REPORT = {"final", "amended", "corrected", "appended"}
 
 
 @dataclass
@@ -142,7 +142,7 @@ class Bridge:
         path = None
         try:
             if self.fhir_sink:
-                extra += self._drop_late_preliminary(bundle)
+                extra += self._reconcile(bundle)
             path = self.dir_sink.write(bundle, safe_name(msg.sending_app, msg.control_id)) if self.dir_sink else None
             if self.fhir_sink:
                 entries = self.fhir_sink.post(bundle)
@@ -164,24 +164,24 @@ class Bridge:
                 self._seen.popitem(last=False)
         return self._ack(msg, "AA", issues, entries=entries, bundle=bundle, path=path)
 
-    def _drop_late_preliminary(self, bundle: dict) -> list[Issue]:
-        """A preliminary report arriving after the final one (an interface queue retried an old message)
-        must not turn a signed report back into a preliminary. A conditional PUT cannot say "only if not
-        final", so the bridge reads the current report first and drops the stale DiagnosticReport entry.
-        (Read-then-write: safe for one connection sending in order; see README for concurrent senders.)"""
+    def _reconcile(self, bundle: dict) -> list[Issue]:
+        """Orders and reports: read what the server holds before writing, because a conditional request cannot
+        say "only if newer". An older message that would undo a newer state (a final over a correction, a late
+        preliminary over a final, a status change that re-opens a cancelled order) is dropped, with a warning.
+        Read-then-write: safe for one connection sending in order; see README for concurrent senders."""
         issues = []
         for e in list(bundle["entry"]):
             res, req = e["resource"], e["request"]
-            if res.get("resourceType") != "DiagnosticReport" or req["method"] != "PUT" or res.get("status") not in EARLY_REPORT:
+            rt = req["url"].split("?")[0].split("/")[0]
+            if rt not in ("ServiceRequest", "DiagnosticReport") or req["method"] not in ("PUT", "PATCH") or "?" not in req["url"]:
                 continue
             current = self.fhir_sink.search(req["url"])
-            if any(c.get("status") in SIGNED_REPORT for c in current):
-                bundle["entry"].remove(e)
-                for other in bundle["entry"]:
-                    if other["resource"].get("resourceType") == "Provenance":
-                        other["resource"]["target"] = [t for t in other["resource"]["target"] if t.get("reference") != e["fullUrl"]]
-                issues.append(Issue("0", f"late {res['status']} report ignored: the report is already {current[0].get('status')}",
-                                    Location("OBR", 1, 25), "W"))
+            if len(current) != 1:
+                continue                      # none: it is created; several: the server answers 412 -> AE
+            stale = _stale(rt, req, res, current[0])
+            if stale:
+                _drop_entry(bundle, e)
+                issues.append(Issue("0", stale, Location("OBR", 1, 25) if rt == "DiagnosticReport" else Location("ORC", 1, 1), "W"))
         return issues
 
     # ---- ACK helpers -------------------------------------------------------------------------------
@@ -225,3 +225,49 @@ def _status_change_for_unknown_order(bundle: dict, entries: list[EntryResult]) -
             out.append(Issue(UNKNOWN_KEY_IDENTIFIER, f"status change ({r.get('status')}) for unknown order {ident}; created it",
                              Location("ORC", 1, 2), "W"))
     return out
+
+
+def _older(a: str | None, b: str | None) -> bool:
+    if not a or not b:
+        return False
+    try:
+        return datetime.fromisoformat(a) < datetime.fromisoformat(b)
+    except (TypeError, ValueError):
+        return False
+
+
+def _stale(rt: str, req: dict, res: dict, cur: dict) -> str | None:
+    """Why this entry would undo newer state on the server, or None."""
+    if rt == "DiagnosticReport" and req["method"] == "PUT":
+        new, old = T.REPORT_STATUS_RANK.get(res.get("status")), T.REPORT_STATUS_RANK.get(cur.get("status"))
+        if new is None or old is None:
+            return None
+        if new < old:
+            return f"late {res['status']} report ignored: the report is already {cur['status']}"
+        if new == old and _older(res.get("issued"), cur.get("issued")):
+            return f"older {res['status']} report ignored: the stored one was issued later ({cur['issued']})"
+        return None
+    if rt == "ServiceRequest":
+        if req["method"] == "PUT":
+            new = res.get("status")
+        else:
+            new = next((p.get("valueCode") for op in res.get("parameter", []) for p in op.get("part", [])
+                        if p.get("name") == "value" and any(q.get("valueString") == "ServiceRequest.status" for q in op.get("part", []))), None)
+        exits = T.ORDER_STATUS_EXITS.get(cur.get("status"))
+        if new and exits is not None and new != cur.get("status") and new not in exits:
+            return f"late order status {new} ignored: the order is already {cur['status']}"
+    return None
+
+
+def _drop_entry(bundle: dict, e: dict) -> None:
+    """Remove one entry and its Provenance target; a Provenance left with no target (target is 1..*) goes too."""
+    bundle["entry"].remove(e)
+    patch_tok = e["request"]["url"].split("identifier=", 1)[-1].split(",")[0] if e["request"]["method"] == "PATCH" else None
+    for other in list(bundle["entry"]):
+        prov = other["resource"]
+        if prov.get("resourceType") != "Provenance":
+            continue
+        prov["target"] = [t for t in prov["target"] if t.get("reference") != e["fullUrl"] and not (
+            patch_tok and t.get("identifier") and token(t["identifier"].get("system"), t["identifier"]["value"]) == patch_tok)]
+        if not prov["target"]:
+            bundle["entry"].remove(other)
