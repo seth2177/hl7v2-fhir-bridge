@@ -204,3 +204,34 @@ def test_status_change_does_not_move_authored_on(server_cfg, mock_server):
     bridge.close()
     [sr] = mock_server.store.all("ServiceRequest")
     assert sr["status"] == "completed" and sr["authoredOn"] == placed
+
+
+# ---- the order or report found by its numbers must belong to this message's patient ------------------------
+OTHER_PATIENT = ("SYN555555^^^SYNTH_HOSP^MR", "OTHER^PAT")
+
+
+def _for_other_patient(message: str) -> str:
+    return message.replace(r.PATIENT["ids"], OTHER_PATIENT[0]).replace("NÚÑEZ^JOSÉ^ANTONIO", OTHER_PATIENT[1])
+
+
+def test_report_with_the_same_numbers_for_another_patient_is_refused(server_cfg, mock_server):
+    """Every order number matches, but PID-3 is someone else: writing it would put patient B's report on A's order."""
+    bridge = _bridge(server_cfg)
+    assert bridge.handle(r.orm("NW", "O1", **O1).encode()).ack_code == "AA"
+    assert bridge.handle(r.oru("F", "R1", **O1, findings=["a"], impression="PATIENT A report").encode()).ack_code == "AA"
+    res = bridge.handle(_for_other_patient(r.oru("C", "R2", **O1, findings=["b"], impression="PATIENT B report")).encode())
+    bridge.close()
+    assert res.ack_code == "AE" and "another patient" in str(res.issues[0])
+    assert [d["conclusion"] for d in mock_server.store.all("DiagnosticReport")] == ["PATIENT A report"]
+
+
+def test_order_placed_before_an_a40_merge_still_takes_the_surviving_patients_report(server_cfg, mock_server):
+    """The order was placed on MRN SYN100999; A40 merged it into SYN100234; the report carries the survivor's MRN."""
+    bridge = _bridge(server_cfg)
+    old = {**r.PATIENT, "ids": "SYN100999^^^SYNTH_HOSP^MR"}
+    assert bridge.handle(r.orm("NW", "O1", **O1).replace(r.PATIENT["ids"], old["ids"]).encode()).ack_code == "AA"
+    assert bridge.handle(sample_bytes("adt_a40_merge.hl7")).ack_code == "AA"
+    res = bridge.handle(r.oru("F", "R1", **O1, findings=["a"], impression="IMPRESSION: ok").encode())
+    bridge.close()
+    assert res.ack_code == "AA", [str(i) for i in res.issues]
+    assert mock_server.store.all("DiagnosticReport")[0]["conclusion"] == "IMPRESSION: ok"
