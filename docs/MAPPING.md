@@ -168,7 +168,7 @@ Instance UID).
 | 0004 Patient class | Encounter.class (v3 ActCode) | E EMER · I IMP · O AMB · P PRENC · R AMB · B IMP · other → NullFlavor UNK |
 | 0119 Order control | ServiceRequest.status | NW, OK, XO, XX, RL, OR active (or ORC-5 if present) · SC → ORC-5 required · CA, CR, OC, DC, DR, OD revoked · HD, OH on-hold · anything else AE 103 |
 | 0038 Order status | ServiceRequest.status | A, IP, SC active · CM completed · CA, DC, RP revoked · HD on-hold · ER entered-in-error |
-| 0123 Result status | DiagnosticReport.status | O, I, S registered · A partial · P, R preliminary · F final · **C corrected** · X cancelled · D entered-in-error |
+| 0123 Result status | DiagnosticReport.status | O, I, S registered · A, R partial · P preliminary · F final · **C corrected** · X cancelled · anything else (e.g. D, Y, Z) AE 103 |
 | 0027 Priority | ServiceRequest.priority | S stat · A asap · R routine · T, P urgent |
 | 0074 Diagnostic service section | DR.category (v2-0074); modality | CT→CT · NMR, MR→MR · US→US · NMS, NM→NM · MG, PT, XA, RF, DX, CR as is |
 | 0396 Coding system | Coding.system | LN → loinc.org · SCT/SNM → snomed.info/sct · C4/CPT → ama-assn.org/go/cpt · I10 → icd-10 · I10C → icd-10-cm · I9C → icd-9-cm · DCM → DICOM · RADLEX/RID → radlex.org · anything else → `<code_system_base><name>` |
