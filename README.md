@@ -104,7 +104,7 @@ executed them (see *Scope and safety*).
 | Non-ASCII names (José Núñez), MSH-18 | declared charsets are decoded strictly: bytes that aren't valid in the declared set, or UTF-8 bytes under a single-byte declaration such as 8859/1, are AE, not a mangled name; undeclared: UTF-8, then cp1252 with a warning | `hl7/charset.py` |
 | `\r\n` or `\n` instead of `\r`; a bare LF inside report text | all three terminators accepted; a bare LF in a CR message is data, not a segment | `hl7/parser.py` |
 | Empty fields, trailing separators, `""` explicit nulls, padded values | empty ≠ `""`; trailing separators harmless; values stripped | `hl7/parser.py` |
-| Escapes and formatted text (`\F\ \S\ \.br\ \H\ \Xhh\`); unescaped `^` in report text | full escape handling; report text read whole, so a stray `^` survives | `hl7/escape.py`, `mapping/results.py` |
+| Escapes and formatted text (`\F\ \S\ \.br\ \H\ \Xhh\`); unescaped `^` in report text | escape handling per v2.5.1 2.7 (formatting commands mapped to line breaks and spaces, with caps); report text read whole, so a stray `^` survives | `hl7/escape.py`, `mapping/results.py` |
 | Z-segments (and OMI's IPC) | kept verbatim on the message's Provenance; ZDS-1 becomes the ImagingStudy UID (IHE convention) | `mapping/provenance.py` |
 | Malformed message | AR with ERR (location and HL7 0357 code); MSA-2 recovered even when the message does not parse | `hl7/ack.py` |
 | Split frames, several messages per read, noise between frames, hang-ups | a streaming frame decoder; per-connection ordering; nothing can stop the listener | `mllp.py` |
