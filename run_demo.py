@@ -109,7 +109,7 @@ def _get(client: httpx.Client, base: str, path: str) -> list[dict]:
 
 def _summarise(base: str) -> dict:
     state: dict = {}
-    with httpx.Client(timeout=15) as c:
+    with httpx.Client(timeout=15, trust_env=False) as c:      # the in-process mock, never via a proxy
         for rt in ("Patient", "Encounter", "Practitioner", "ServiceRequest", "ImagingStudy", "DiagnosticReport", "Provenance"):
             state[rt] = _get(c, base, rt)
         state["dr_history"] = {dr["id"]: _get(c, base, f"DiagnosticReport/{dr['id']}/_history") for dr in state["DiagnosticReport"]}

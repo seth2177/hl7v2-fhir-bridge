@@ -108,3 +108,14 @@ def test_demo_end_to_end(tmp_path, capsys):
     out = capsys.readouterr().out
     assert "preliminary -> final -> corrected" in out and "NÚÑEZ-GARCÍA" in out
     assert len(list((tmp_path / "bundles").glob("*.json"))) == 9
+
+
+def test_demo_works_when_a_system_proxy_is_configured(tmp_path, monkeypatch):
+    """httpx picks up the system proxy (on Windows from the registry) but not the Windows <local> bypass, so the
+    demo's 127.0.0.1 traffic went to the proxy and every message got an error ACK."""
+    for var in ("NO_PROXY", "no_proxy", "ALL_PROXY", "all_proxy", "HTTPS_PROXY", "https_proxy"):
+        monkeypatch.delenv(var, raising=False)
+    monkeypatch.setenv("HTTP_PROXY", "http://127.0.0.1:9")
+    monkeypatch.setenv("http_proxy", "http://127.0.0.1:9")
+    rows = run_demo.main(["--workdir", str(tmp_path)])
+    assert [r["ack"] for r in rows] == ["AA"] * 10 + ["AR"]
