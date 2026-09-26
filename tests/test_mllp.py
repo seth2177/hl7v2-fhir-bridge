@@ -262,7 +262,7 @@ SERVE = textwrap.dedent(f"""
 @pytest.mark.skipif(sys.platform == "win32", reason="uses resource.setrlimit")
 def test_seventy_silent_connections_do_not_lock_out_a_real_sender():
     """With a 64-fd limit, 70 peers that connect and send nothing used to leave the listener unable to accept (EMFILE)."""
-    p = subprocess.Popen([sys.executable, "-c", SERVE], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    p = subprocess.Popen([sys.executable, "-c", SERVE], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8")
     silent = []
     try:
         port = int(p.stdout.readline())
