@@ -1,5 +1,9 @@
 """MLLP framing and the asyncio listener over real TCP on localhost."""
+import asyncio
+import gc
+import logging
 import socket
+import sys
 import time
 
 import pytest
@@ -167,3 +171,43 @@ def test_frame_of_exactly_max_bytes_is_accepted_however_it_arrives(split):
     data = frame(payload)
     frames = dec.feed(data[:-1]) + dec.feed(data[-1:]) if split else dec.feed(data)
     assert [(f.data, f.oversize) for f in frames] == [(payload, False)]
+
+
+# ---- shutdown ------------------------------------------------------------------------------------------------
+def test_serve_forever_stops_when_cancelled_with_a_sender_still_connected():
+    """Ctrl+C cancels serve_forever(). On Python 3.12+ asyncio.Server.serve_forever() then waited for every
+    open connection to close, and an interface engine's connection never does."""
+    async def main() -> bool:
+        srv = MLLPServer(lambda fr: None, "127.0.0.1", 0, idle_timeout=30)
+        await srv.start()
+        task = asyncio.create_task(srv.serve_forever())
+        _, writer = await asyncio.open_connection("127.0.0.1", srv.port)
+        await asyncio.sleep(0.2)
+        task.cancel()
+        done, _ = await asyncio.wait({task}, timeout=3)
+        writer.close()
+        if not done:
+            await srv.close()
+        return bool(done)
+
+    assert asyncio.run(main())
+
+
+def test_stop_right_after_a_connect_is_prompt_and_leaves_no_pending_task(caplog):
+    unraisable = []
+    old_hook, sys.unraisablehook = sys.unraisablehook, unraisable.append
+    caplog.set_level(logging.ERROR, logger="asyncio")
+    try:
+        durations = []
+        for _ in range(5):
+            srv = ServerThread(MLLPServer(lambda fr: None, "127.0.0.1", 0)).start()
+            s = socket.create_connection(("127.0.0.1", srv.port))
+            t = time.monotonic()
+            srv.stop()
+            durations.append(time.monotonic() - t)
+            s.close()
+        gc.collect()
+    finally:
+        sys.unraisablehook = old_hook
+    assert max(durations) < 1.0
+    assert not [r for r in caplog.records if "destroyed but it is pending" in r.getMessage()] and not unraisable
