@@ -139,21 +139,24 @@ run_demo.py      the whole workflow in one command
 
 ## Quality
 
-- 180 tests run in CI on Linux and Windows, Python 3.11 and 3.12, plus `ruff`. The demo runs too, and checks its
-  own end state.
+- 294 tests, plus `ruff`, run in CI on Linux and Windows with Python 3.11 and 3.12. CI also runs the demo, which
+  checks its own end state.
 - Every bundle the bridge produces is validated against the FHIR models (`fhir.resources` 8.3, R4B classes),
   against the required value sets the models don't enforce, and against the few FHIR invariants this mapper could
-  break. It is not full conformance validation: that needs the HL7 validator or a server's `$validate`. The tests validate every sample and every demo
-  message.
-- Idempotency is tested against a server that really executes the transaction: conditional create, update and
-  patch, reference rewriting, all-or-nothing rollback, 404/412.
-- Adversarial testing: I fuzzed the parser, mapper and bridge with 120,000 mutated and random messages, and the
-  listener with concurrent random bytes, truncated frames and oversize frames. It found real problems:
-  control bytes from MSH-3 echoed into the ACK (a `0x1C` there ends the sender's MLLP frame early), a garbage
-  segment id echoed into ERR-2 (splitting the ERR segment), and NUL accepted as a field separator. Reviewing
-  my own mapping found orders matched on one number when systems send different subsets. Each is fixed, and
-  its regression test fails on the old code (`tests/test_adversarial.py`). A seeded fuzz run is part of the
-  suite.
+  break. It is not full conformance validation: that needs the HL7 validator or a server's `$validate`.
+- Idempotency and ordering are tested against a server that really executes the transaction: conditional create,
+  update and patch, reference rewriting, all-or-nothing rollback, 404/412.
+- Adversarial testing, first round: I fuzzed the parser, mapper and bridge with 120,000 seeded mutated and random
+  messages (`FUZZ_N=120000 python -m pytest tests/test_adversarial.py -k fuzz_parser` reruns it; every suite run
+  does 3,000), and the listener with concurrent random bytes, truncated frames and oversize frames. It found
+  control bytes from MSH-3 echoed into the ACK (a `0x1C` there breaks the sender's MLLP framing), a garbage
+  segment id echoed into ERR-2 (splitting the ERR segment), and NUL accepted as a field separator.
+- Adversarial testing, second round: I went through the output against the FHIR R4 spec, HL7 v2.5.1 chapter 2
+  and the v2-to-FHIR IG ConceptMaps, and attacked the listener and the ordering logic directly. That found the
+  serious ones: a patient identifier without a system that matched any patient, a resent final report that
+  replaced the correction, one order number shared by two patients' orders, a 16-byte `\.sp` escape that could
+  exhaust memory, a run of `0x0B` bytes that stalled every connection, and code maps that didn't match the IG.
+  Every fix has a regression test that fails on the old code.
 
 ## Scope and safety
 
