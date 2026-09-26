@@ -333,3 +333,37 @@ def test_a_second_connection_waiting_for_the_fhir_lock_still_gets_its_ack_in_tim
 
 def test_shipped_worst_case_fits_inside_the_bundled_client_timeout(cfg):
     assert cfg.ack_deadline_seconds < 30          # MLLPClient's default timeout, and a common engine default
+
+
+EVICT_MSG = b"MSH|^~\\&|RIS|H|V2FHIR|B|2026||ADT^A04|OK1|P|2.5\r"
+
+
+def _evict_handler(fr):
+    return b"MSH|^~\\&|V2FHIR|B|RIS|H|2026||ACK|X|P|2.5\rMSA|AA|OK1\r"
+
+
+def test_a_connection_that_is_receiving_a_frame_is_not_evicted_before_a_silent_one():
+    """At the connection limit the quietest idle peer is dropped. Activity used to count only whole ACKed frames,
+    so a sender part-way through its first message looked quieter than a peer that never sent a byte."""
+    srv = ServerThread(MLLPServer(_evict_handler, "127.0.0.1", 0, idle_timeout=30, max_connections=2)).start()
+    try:
+        streaming = socket.create_connection(("127.0.0.1", srv.port), timeout=5)
+        streaming.sendall(b"\x0b" + EVICT_MSG)                       # frame started
+        time.sleep(0.2)
+        silent = socket.create_connection(("127.0.0.1", srv.port), timeout=5)
+        time.sleep(0.2)
+        streaming.sendall(b"OBX|1|TX|x||" + b"y" * 1000)      # still actively sending
+        time.sleep(0.2)
+        newcomer = socket.create_connection(("127.0.0.1", srv.port), timeout=5)
+        time.sleep(0.3)
+        streaming.sendall(b"\r\x1c\r")                       # finish the frame
+        try:
+            ack = streaming.recv(4096)
+        except (ConnectionError, TimeoutError, OSError) as e:
+            ack = repr(e).encode()
+        assert b"MSA|AA" in ack, f"actively-sending connection was evicted instead of the silent one: {ack!r}"
+        silent.close()
+        newcomer.close()
+        streaming.close()
+    finally:
+        srv.stop()

@@ -214,6 +214,7 @@ class MLLPServer:
                     break
                 if not data:
                     break
+                conn.last = time.monotonic()              # any bytes count as activity, not only whole frames
                 for fr in decoder.feed(data):
                     self.messages += 1
                     conn.busy = True
@@ -222,8 +223,6 @@ class MLLPServer:
                     except Exception:  # noqa: BLE001 -- handler bug: log it, keep the connection and the listener
                         log.exception("MLLP handler failed")
                         ack = None
-                    finally:
-                        conn.busy = False
                     if ack:
                         writer.write(frame(ack))
                         try:                              # a peer that stops reading ACKs mustn't hold this forever
@@ -232,6 +231,7 @@ class MLLPServer:
                             log.warning("closing %s: it stopped reading ACKs", peer)
                             conn.drop()                   # close() would wait for the unsent ACK to flush
                             return
+                    conn.busy = False                     # handled and ACKed: from here it may be evicted
                     conn.frames += 1
                     conn.last = time.monotonic()
         except (ConnectionError, OSError) as e:
@@ -249,9 +249,9 @@ class MLLPServer:
 @dataclass
 class _Conn:
     writer: asyncio.StreamWriter
-    last: float = field(default_factory=time.monotonic)      # connect time, then time of the last ACKed frame
+    last: float = field(default_factory=time.monotonic)      # connect time, then the last time it sent anything
     frames: int = 0
-    busy: bool = False                                       # a message is being handled
+    busy: bool = False                                       # a message is being handled or its ACK written
     dropped: bool = False
 
     def drop(self) -> None:
