@@ -4,6 +4,7 @@ Regressions: the first four tests are problems the fuzzer or my review found; ea
 before its fix. Then two robustness tests (ambiguous order numbers, search-special characters) and the
 fuzzing itself, seeded so CI is repeatable."""
 import logging
+import os
 import random
 import socket
 import threading
@@ -15,6 +16,7 @@ from tools import ris_sim as r
 from v2fhir.bridge import Bridge
 from v2fhir.convert import convert
 from v2fhir.errors import HL7Error
+from v2fhir.hl7.ack import head_fields
 from v2fhir.hl7.parser import parse_bytes
 from v2fhir.mllp import FrameDecoder, MLLPClient, MLLPServer, ServerThread, bridge_handler, frame
 from v2fhir.validate import validate_bundle
@@ -114,9 +116,11 @@ def quiet_logs():
 
 
 def test_fuzz_parser_converter_and_bridge(cfg):
+    """Seeded, so a failure reproduces. FUZZ_N=120000 python -m pytest tests/test_adversarial.py -k fuzz_parser
+    runs the full-size pass (about a minute and a half); the suite runs 3,000."""
     rng = random.Random(20260925)
     bridge = Bridge(cfg)
-    for n in range(3000):
+    for n in range(int(os.environ.get("FUZZ_N", "3000"))):
         raw = mutate(rng, rng.choice(SEEDS)) if n % 4 else bytes(rng.randrange(256) for _ in range(rng.randint(0, 200)))
         try:
             msg = parse_bytes(raw)
@@ -129,7 +133,8 @@ def test_fuzz_parser_converter_and_bridge(cfg):
         res = bridge.handle(raw)                            # must never raise
         if res.ack is not None:
             ack = res.ack_bytes
-            assert ack.startswith(b"MSH|") and b"\rMSA|" in ack and b"\x0b" not in ack and b"\x1c" not in ack, raw
+            fs = (head_fields(raw).get("fs") or "|").encode("latin-1")    # the ACK uses the sender's own separator
+            assert ack.startswith(b"MSH" + fs) and b"\rMSA" + fs in ack and b"\x0b" not in ack and b"\x1c" not in ack, raw
             assert res.ack_code in ("AA", "AE", "AR")
             assert "internal error" not in " ".join(str(i) for i in res.issues), raw
 
