@@ -92,7 +92,7 @@ executed them (see *Scope and safety*).
 | PID-3 repeats with several assigning authorities | the MRN is chosen by configured authority, then type MR; all identifiers kept; the match is on the chosen one | `mapping/patient.py` |
 | An old order's PID overwriting a newer A08 | only ADT upserts demographics; orders and results create-if-absent | `mapping/patient.py` |
 | ORU arrives before its ORM | the result creates the order; the late NW matches it and cannot re-open it | `mapping/results.py`, `orders.py` |
-| Placer, filler and accession numbers arrive in different subsets from different systems | orders and reports match on **any** of them (`identifier=a,b,c`); two different orders matching is AE, not a guess, and so is one stored order whose placer, filler or accession of the same system has a different value (AE 205). Numbers are merged, never erased: a message carrying a subset keeps the others | `mapping/orders.py` |
+| Placer, filler and accession numbers arrive in different subsets from different systems | orders and reports match on **any** of them (`identifier=a,b,c`); two different orders matching is AE, not a guess, and so is one stored order whose placer, filler or accession of the same system has a different value (AE 205). An order or report that belongs to another patient (not linked by an A40) is AE too. Numbers are merged, never erased: a message carrying a subset keeps the others | `mapping/orders.py` |
 | Cancel for an order the server never saw | ORC-only cancel: AE 204 (unknown key). Full cancel: recorded as revoked, AA with warning | `bridge.py` |
 | ORC-only cancel wiping the order | status-only messages become a FHIRPath PATCH of `status`, not a PUT | `mapping/orders.py` |
 | An old result overwriting a newer report (a late preliminary after the final, a resent final after the correction, a queued cancel after the final) | reads the current report first; a lower status never replaces a higher one, and at equal status the older OBR-22 loses; the stale entry is dropped with a warning | `bridge.py` |
@@ -159,7 +159,7 @@ its own (the sender's queue and the AE/resend contract are the durability), no e
 and no batch (FHS/BHS) over MLLP. Text OBX becomes the report; numeric OBX are not mapped to Observations.
 
 **Known limits.** The dedupe cache is in memory. Encounters are matched on the visit number alone, so a site
-that reuses visit numbers across facilities needs a per-facility system. The report and order ordering guard and the
+that reuses visit numbers across facilities needs a per-facility system. The checks that read orders and reports before writing (ordering, number conflicts, patient) and the
 unknown-order warning need the FHIR server (the directory sink alone can't know server state). They read
 before writing, which is safe for one connection sending in order. Two connections sending updates to the same
 report at the same moment can race, and so can concurrent conditional creates on some servers. A40 writes both

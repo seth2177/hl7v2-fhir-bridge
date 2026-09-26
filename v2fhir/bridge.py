@@ -172,6 +172,8 @@ class Bridge:
         DiagnosticReport entry that matches exactly one stored resource:
           conflict  a stored order number of the same type and system has another value: a different order
                     shares one of the numbers -> AE 205, a person has to look
+          patient   the stored order or report belongs to another patient (not this one, nor one linked to it by
+                    an A40 merge) -> AE 207, a person has to look
           stale     an older message would undo newer state (a final over a correction, a late preliminary over
                     a final, a status change that re-opens a cancelled order) -> the entry is dropped, with a warning
           merge     numbers the server has but this message lacks are kept, and so is an order's authoredOn;
@@ -196,6 +198,10 @@ class Bridge:
                     raise HL7Error(f"{rt}/{cur.get('id')} has {clash}: a different order shares one of these numbers; "
                                    "needs manual reconciliation"[:250], DUPLICATE_KEY_IDENTIFIER,
                                    Location("ORC" if rt == "ServiceRequest" else "OBR", 1, 2))
+                if not self._same_patient(bundle, res, cur):
+                    raise HL7Error(f"{rt}/{cur.get('id')} matched on its order numbers belongs to another patient "
+                                   f"({(cur.get('subject') or {}).get('reference')}); needs manual reconciliation"[:250],
+                                   APPLICATION_INTERNAL_ERROR, Location("PID", 1, 3))
             stale = _stale(rt, req, res, cur)
             if stale:
                 _drop_entry(bundle, e)
@@ -204,6 +210,23 @@ class Bridge:
             if req["method"] != "PATCH":
                 _merge_numbers(e, cur, query)
         return issues
+
+    def _same_patient(self, bundle: dict, res: dict, cur: dict) -> bool:
+        """Is the stored resource's subject this message's patient, or a patient an A40 linked to it?"""
+        stored = (cur.get("subject") or {}).get("reference", "")
+        mine = next((e for e in bundle["entry"] if e["fullUrl"] == (res.get("subject") or {}).get("reference")), None)
+        if not stored.startswith("Patient/") or mine is None:
+            return True                       # nothing to compare
+        req = mine["request"]
+        query = req["url"].split("?", 1)[1] if "?" in req["url"] else req.get("ifNoneExist")
+        if not query:
+            return True
+        mine_ids = {p.get("id") for p in self.fhir_sink.search(f"Patient?{query}")}
+        sid = stored.split("/", 1)[1]
+        linked = {sid}
+        for p in self.fhir_sink.search(f"Patient?_id={sid}"):
+            linked |= {(ln.get("other") or {}).get("reference", "").split("/", 1)[-1] for ln in p.get("link", [])}
+        return bool(mine_ids & linked)
 
     # ---- ACK helpers -------------------------------------------------------------------------------
     def _ack(self, msg: Message, code: str, issues: list[Issue], *, entries=None, bundle=None, path=None, duplicate=False) -> Result:
