@@ -190,4 +190,4 @@ example.org systems). Don't point it at production PHI without a formal review.
 
 ---
 
-Built by **Seth Turnbo**: 23 years on MRI/CT (GE, Philips, Siemens), multi-vendor DICOM/HL7/PACS integration, founder of [B&R Global](https://bandrimaging.com). [LinkedIn](https://www.linkedin.com/in/sethturnbo)
+Built by **Seth Turnbo**: 23 years on MRI/CT (GE, Philips, Siemens), multi-vendor DICOM/HL7/PACS integration. [LinkedIn](https://www.linkedin.com/in/sethturnbo)
