@@ -118,39 +118,56 @@ class MLLPServer:
         self.idle_timeout = idle_timeout
         self._server: asyncio.base_events.Server | None = None
         self._tasks: set[asyncio.Task] = set()
+        self._closing = False
         self.connections = 0
         self.messages = 0
 
     async def start(self) -> MLLPServer:
-        self._server = await asyncio.start_server(self._client, self.host, self.port, limit=2 ** 20)
+        self._server = await asyncio.start_server(self._on_connect, self.host, self.port, limit=2 ** 20)
         self.port = self._server.sockets[0].getsockname()[1]
         log.info("MLLP listening on %s:%d", self.host, self.port)
         return self
 
     async def serve_forever(self) -> None:
+        """Serve until cancelled (Ctrl+C). asyncio.Server.serve_forever() is not used: on Python 3.12+ its
+        cancellation waits for every open connection to close, and a sender's connection never does. The
+        one-second sleep also lets Ctrl+C through on the Windows selector loop, whose select() isn't interrupted."""
         if self._server is None:
             await self.start()
-        async with self._server:
-            await self._server.serve_forever()
+        try:
+            while True:
+                await asyncio.sleep(1)
+        finally:
+            await self.close()
 
     async def close(self) -> None:
-        """Stop accepting, drop open connections, wait for them to finish (Python 3.12+ wait_closed()
-        waits for every connection, so they must be cancelled first)."""
+        """Stop accepting, cancel open connections, wait for them. Connections are cancelled first because
+        Python 3.12+ wait_closed() waits for every one of them."""
+        self._closing = True
         if self._server is not None:
             self._server.close()
-        for t in list(self._tasks):
-            t.cancel()
-        if self._tasks:
+        for _ in range(10):                       # a connection accepted during the gather is caught next round
+            if not self._tasks:
+                break
+            for t in list(self._tasks):
+                t.cancel()
             await asyncio.gather(*self._tasks, return_exceptions=True)
+            await asyncio.sleep(0)
         if self._server is not None:
             with contextlib.suppress(Exception):
                 await asyncio.wait_for(self._server.wait_closed(), 5)
 
+    def _on_connect(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        """Register the connection's task synchronously, so close() can never miss one that was just accepted."""
+        if self._closing:
+            writer.close()
+            return
+        t = asyncio.get_running_loop().create_task(self._client(reader, writer))
+        self._tasks.add(t)
+        t.add_done_callback(self._tasks.discard)
+
     async def _client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         peer = writer.get_extra_info("peername")
-        task = asyncio.current_task()
-        if task is not None:
-            self._tasks.add(task)
         self.connections += 1
         decoder = FrameDecoder(self.max_message_bytes)
         try:
@@ -177,8 +194,6 @@ class MLLPServer:
         except Exception:  # noqa: BLE001
             log.exception("unexpected error on connection %s", peer)
         finally:
-            if task is not None:
-                self._tasks.discard(task)
             if decoder.discarded:
                 log.warning("%s: %d bytes outside MLLP frames discarded", peer, decoder.discarded)
             writer.close()
@@ -251,6 +266,11 @@ class ServerThread:
         self._ready.set()
         self.loop.run_forever()
         self.loop.run_until_complete(self.server.close())
+        leftover = [t for t in asyncio.all_tasks(self.loop) if not t.done()]      # what asyncio.run() would cancel
+        for t in leftover:
+            t.cancel()
+        if leftover:
+            self.loop.run_until_complete(asyncio.gather(*leftover, return_exceptions=True))
         self.loop.close()
 
     def start(self, timeout: float = 10) -> ServerThread:
