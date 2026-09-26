@@ -89,6 +89,7 @@ executed them (see *Scope and safety*).
 |---|---|---|
 | Engines resend messages, and a restart forgets what was seen | MSH-10 + content-hash dedupe re-ACKs a resend; every FHIR request is conditional, and orders and reports are checked against the server before writing, so a resend after a restart does not duplicate or roll back anything (the same ORM twice gives one ServiceRequest) | `bridge.py`, `mapping/bundle.py` |
 | One control id reused for a different message (counter reset) | processed, with a warning; dropping a real message is worse | `bridge.py` |
+| An assigning authority that isn't a namespace, OID, UUID or URI (DNS, local, a mistyped OID), or none at all | still gets its own system; a patient key with no authority at all is AE, never a bare-value search (which in FHIR matches any system) | `mapping/datatypes.py`, `mapping/patient.py` |
 | PID-3 repeats with several assigning authorities | the MRN is chosen by configured authority, then type MR; all identifiers kept; the match is on the chosen one | `mapping/patient.py` |
 | An old order's PID overwriting a newer A08 | only ADT upserts demographics; orders and results create-if-absent | `mapping/patient.py` |
 | ORU arrives before its ORM | the result creates the order; the late NW matches it and cannot re-open it | `mapping/results.py`, `orders.py` |

@@ -65,24 +65,34 @@ def ts(value: str | None, kind: str, ctx: Ctx, where: Location | None = None) ->
 
 
 # ---- identifiers --------------------------------------------------------------------------------
-def hd_system(namespace: str | None, universal: str | None, universal_type: str | None, ctx: Ctx) -> str | None:
+def hd_system(namespace: str | None, universal: str | None, universal_type: str | None, ctx: Ctx,
+              where: Location | None = None) -> str | None:
     """HD (assigning authority / namespace) -> Identifier.system.
 
-    Order: site config for the namespace, then an ISO OID / UUID / URI universal id, then
-    <identifier_system_base><namespace>. None when there is nothing to go on.
+    Order: site config for the namespace or the universal id, then an ISO OID / UUID / URI universal id, then
+    <identifier_system_base><namespace>, then <identifier_system_base><universal id> (with a warning). None only
+    when the HD is empty. An identifier without a system must never become a match key: in FHIR,
+    identifier=1001 matches 1001 in *any* system (R4 search.html#token).
     """
     cfg = ctx.cfg
-    if namespace and namespace in cfg.assigning_authorities:
-        return cfg.assigning_authorities[namespace]
+    for key in (namespace, universal):
+        if key and key in cfg.assigning_authorities:
+            return cfg.assigning_authorities[key]
     utype = (universal_type or "").upper()
-    if universal and utype == "ISO" and re.fullmatch(r"[0-2](\.(0|[1-9]\d*))+", universal):
-        return f"urn:oid:{universal}"
+    if universal and utype == "ISO":
+        if re.fullmatch(r"[0-2](\.(0|[1-9]\d*))+", universal):
+            return f"urn:oid:{universal}"
+        ctx.warn(f"assigning authority {universal!r} is not a valid ISO OID", where)
     if universal and utype == "UUID":
         return f"urn:uuid:{universal.lower()}"
     if universal and utype in ("URI", "URL"):
         return universal
     if namespace:
         return cfg.identifier_system_base + quote(namespace.lower(), safe="-._~")
+    if universal:
+        system = cfg.identifier_system_base + quote(universal.lower(), safe="-._~")
+        ctx.warn(f"assigning authority {universal!r} (type {utype or 'none'}) has no configured system; using {system}", where)
+        return system
     return None
 
 
@@ -108,7 +118,7 @@ def cx(rep: Rep, ctx: Ctx, where: Location | None = None, default_authority: str
     t = identifier_type(rep.get(5))
     if t:
         ident["type"] = t
-    system = hd_system(ns, uni, utype, ctx)
+    system = hd_system(ns, uni, utype, ctx, where)
     if system:
         ident["system"] = system
     ident["value"] = value

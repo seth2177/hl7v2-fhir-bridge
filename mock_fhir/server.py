@@ -96,7 +96,7 @@ class FhirStore:
                 for tok in _split(value, ",", False):
                     parts = _unescape_token(tok)
                     wanted.append((parts[0], parts[1]) if len(parts) > 1 else (None, parts[0]))
-                ids = [i for i in ids if any((system is None or idf.get("system") == system) and idf.get("value") == val
+                ids = [i for i in ids if any((system is None or (idf.get("system") or "") == system) and idf.get("value") == val
                                              for system, val in wanted for idf in data[rtype][i][-1].get("identifier", []))]
             elif name == "_id":
                 ids = [i for i in ids if i == value]

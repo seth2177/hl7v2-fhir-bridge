@@ -49,10 +49,18 @@ def choose_mrn(ids: list[tuple[dict, str | None]], ctx: Ctx, where) -> dict:
     return chosen
 
 
+def require_system(ident: dict, where) -> dict:
+    """A patient key without a system would match that number in any identifier system (R4 search.html#token)."""
+    if not ident.get("system"):
+        raise MappingError(f"identifier {ident['value']!r} has no assigning authority and default_assigning_authority is not set; "
+                           "matching on the bare value would hit any identifier system", REQUIRED_FIELD_MISSING, where)
+    return ident
+
+
 # ---- Patient ------------------------------------------------------------------------------------
 def patient_resource(pid: Segment, ctx: Ctx) -> tuple[dict, dict]:
     ids = identifiers(pid, 3, ctx)
-    mrn = choose_mrn(ids, ctx, pid.loc(3))
+    mrn = require_system(choose_mrn(ids, ctx, pid.loc(3)), pid.loc(3))
     for ident, _ in ids:
         if ident is mrn:
             ident["use"] = "usual"
@@ -142,6 +150,9 @@ def add_encounter(pv1: Segment | None, patient_ref: dict, ctx: Ctx, *, authorita
         if any(pv1.raw(n) for n in (2, 3, 7, 44)):
             ctx.warn("PV1-19 (visit number) is empty; no Encounter written", pv1.loc(19))
         return None
+    if not ident.get("system"):
+        ctx.warn("PV1-19 visit number has no assigning authority; no Encounter written", pv1.loc(19))
+        return None
     if "type" not in ident:
         ident["type"] = dt.identifier_type("VN")
     enc: dict = {"resourceType": "Encounter", "meta": ctx.meta(), "identifier": [ident]}
@@ -184,7 +195,7 @@ def add_merge(pid: Segment, mrg: Segment, ctx: Ctx) -> None:
     """
     survivor, s_mrn = patient_resource(pid, ctx)
     old_ids = identifiers(mrg, 1, ctx)
-    old_mrn = choose_mrn(old_ids, ctx, mrg.loc(1))
+    old_mrn = require_system(choose_mrn(old_ids, ctx, mrg.loc(1)), mrg.loc(1))
     if (old_mrn.get("system"), old_mrn["value"]) == (s_mrn.get("system"), s_mrn["value"]):
         raise MappingError("MRG-1 names the same patient as PID-3; nothing to merge", DUPLICATE_KEY_IDENTIFIER, mrg.loc(1))
     old: dict = {"resourceType": "Patient", "meta": ctx.meta(), "identifier": [i for i, _ in old_ids], "active": False}
