@@ -160,7 +160,7 @@ Instance UID).
 | v2 table | FHIR element | Map |
 |---|---|---|
 | 0001 Administrative sex | Patient.gender | M male · F female · O other · U unknown · A other · N unknown |
-| 0200 Name type | HumanName.use | L official · D usual · M maiden · N nickname · A usual · S anonymous · T temp |
+| 0200 Name type | HumanName.use | L official · D usual · M maiden · N nickname · S anonymous · TEMP, NAV temp · BAD old · A, T and anything else: no use |
 | 0190 Address type | Address.use / type | H home · B, O work · C temp · BA old · M home + type postal |
 | 0201 Telecom use | ContactPoint.use | PRN, ORN, VHN home · WPN work · NET → system email |
 | 0202 Telecom equipment | ContactPoint.system | PH phone · FX fax · CP phone + use mobile · BP pager · Internet, X.400 email · MD, TDD, TTY other |
