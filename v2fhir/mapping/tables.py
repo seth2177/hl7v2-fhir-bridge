@@ -30,9 +30,9 @@ ADDRESS_USE_0190 = {"H": "home", "B": "work", "O": "work", "C": "temp", "BA": "o
 ADDRESS_TYPE_0190 = {"M": "postal"}
 
 # ---- 0201 Telecom use / 0202 Telecom equipment -> ContactPoint --------------------------
-TELECOM_USE_0201 = {"PRN": "home", "ORN": "home", "VHN": "home", "WPN": "work"}
+TELECOM_USE_0201 = {"PRN": "home", "ORN": "home", "VHN": "home", "WPN": "work", "PRS": "mobile"}
 TELECOM_SYSTEM_0202 = {"PH": "phone", "FX": "fax", "CP": "phone", "BP": "pager", "INTERNET": "email", "X.400": "email",
-                       "MD": "other", "TDD": "other", "TTY": "other"}
+                       "MD": "other", "TDD": "other", "TTY": "other", "SAT": "other"}
 
 # ---- 0203 Identifier type: FHIR uses the v2 table itself as the code system ---------------
 IDENTIFIER_TYPE_SYSTEM = V2 + "0203"

@@ -70,7 +70,7 @@ Every resource gets `meta.source = urn:hl7v2:<MSH-3>:<MSH-4>#<MSH-10>` (percent-
 | PID-7 | `birthDate` | date part only, any precision (YYYY, YYYY-MM, YYYY-MM-DD) |
 | PID-8 | `gender` | table 0001; unknown code → omitted + warning |
 | PID-11 (XAD) | `address[]` | table 0190 |
-| PID-13 / PID-14 (XTN) | `telecom[]` | default use home / work; table 0201/0202; e-mail detected |
+| PID-13 / PID-14 (XTN) | `telecom[]` | use home / work when XTN-2 is empty; table 0201/0202 (an unknown XTN-2 leaves use out, an unknown XTN-3 gives system other); e-mail detected |
 | PID-29 / PID-30 | `deceasedDateTime` / `deceasedBoolean` | |
 | — | `active = true` | `false` only for the retired record of an A40 |
 
@@ -162,8 +162,8 @@ Instance UID).
 | 0001 Administrative sex | Patient.gender | M male · F female · O other · U unknown · A other · N unknown |
 | 0200 Name type | HumanName.use | L official · D usual · M maiden · N nickname · S anonymous · TEMP, NAV temp · BAD old · A, T and anything else: no use |
 | 0190 Address type | Address.use / type | H home · B, O work · C temp · BA old · M home + type postal |
-| 0201 Telecom use | ContactPoint.use | PRN, ORN, VHN home · WPN work · NET → system email |
-| 0202 Telecom equipment | ContactPoint.system | PH phone · FX fax · CP phone + use mobile · BP pager · Internet, X.400 email · MD, TDD, TTY other |
+| 0201 Telecom use | ContactPoint.use | PRN, ORN, VHN home · WPN work · PRS mobile · NET → system email · empty → the field's default · anything else: no use |
+| 0202 Telecom equipment | ContactPoint.system | PH phone · FX fax · CP phone + use mobile · BP pager · Internet, X.400 email · MD, TDD, TTY, SAT other · empty → phone · anything else other |
 | 0203 Identifier type | Identifier.type | same codes in `terminology.hl7.org/CodeSystem/v2-0203` (MR, PI, VN, PLAC, FILL, ACSN…) |
 | 0004 Patient class | Encounter.class (v3 ActCode) | E EMER · I IMP · O AMB · P PRENC · R AMB · B IMP · other → NullFlavor UNK |
 | 0119 Order control | ServiceRequest.status | NW, OK, XO, XX, RL, OR active (or ORC-5 if present) · SC → ORC-5 required (empty → AE 101; not in table 0038 → AE 103) · CA, CR, OC, DC, DR, OD revoked · HD, OH on-hold · anything else AE 103 |
