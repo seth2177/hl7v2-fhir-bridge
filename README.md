@@ -103,7 +103,7 @@ executed them (see *Scope and safety*).
 | `\r\n` or `\n` instead of `\r`; a bare LF inside report text | all three terminators accepted; a bare LF in a CR message is data, not a segment | `hl7/parser.py` |
 | Empty fields, trailing separators, `""` explicit nulls, padded values | empty ≠ `""`; trailing separators harmless; values stripped | `hl7/parser.py` |
 | Escapes and formatted text (`\F\ \S\ \.br\ \H\ \Xhh\`); unescaped `^` in report text | full escape handling; report text read whole, so a stray `^` survives | `hl7/escape.py`, `mapping/results.py` |
-| Z-segments | kept verbatim on the message's Provenance; ZDS-1 becomes the ImagingStudy UID (IHE convention) | `mapping/provenance.py` |
+| Z-segments (and OMI's IPC) | kept verbatim on the message's Provenance; ZDS-1 becomes the ImagingStudy UID (IHE convention) | `mapping/provenance.py` |
 | Malformed message | AR with ERR (location and HL7 0357 code); MSA-2 recovered even when the message does not parse | `hl7/ack.py` |
 | Split frames, several messages per read, noise between frames, hang-ups | a streaming frame decoder; per-connection ordering; nothing can stop the listener | `mllp.py` |
 | Huge message | 2 MB reports pass in linear time; above `max_message_bytes` only 4 KB are kept and an AR carries the right control id | `mllp.py` |

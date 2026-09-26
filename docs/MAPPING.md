@@ -117,7 +117,7 @@ MRG-1 naming the same patient as PID-3 is an AE (205).
 | OBR-31, DG1-3 | `reasonCode[]` | |
 | NTE-3 | `note[].text` | |
 | — | `intent = order`, `category = SNOMED 363679005 Imaging` | |
-| ZDS-1 / IPC-3 | not on the ServiceRequest | kept in Provenance; becomes an ImagingStudy when the result arrives |
+| ZDS-1 / IPC-3 | not on the ServiceRequest | the ZDS and IPC segments are kept verbatim on the Provenance; an ImagingStudy is created only when the ORU carries ZDS-1 |
 
 R4 ServiceRequest has no modality element. `orderDetail` ("additional order information") carries it as a
 DICOM coding, and `ImagingStudy.modality` gets it properly once a study exists.
@@ -153,7 +153,7 @@ The ServiceRequest written from an ORU is create-if-absent: `completed` for F/C,
 
 No FHIR home. Each is kept verbatim on the message's Provenance as an extension
 `http://example.org/fhir/StructureDefinition/hl7v2-z-segment` (`valueString`). ZDS-1 is also *read* (Study
-Instance UID).
+Instance UID). OMI's IPC segment is kept the same way, so IPC-3 (the Study Instance UID) is not lost.
 
 ## 3. v2 tables → FHIR codes
 
