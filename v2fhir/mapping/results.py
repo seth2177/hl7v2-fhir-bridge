@@ -93,8 +93,7 @@ def convert_result_message(msg: Message, ctx: Ctx) -> None:
         text, impression, coded = report_text(g.get("OBX", []), ctx)
         dr: dict = {"resourceType": "DiagnosticReport", "meta": ctx.meta(), "identifier": copy.deepcopy(idents),
                     "basedOn": [{"reference": sr_url}], "status": T.RESULT_STATUS_0123[rs]}
-        section = obr.get(24) or "RAD"
-        dr["category"] = [{"coding": [{"system": T.V2 + "0074", "code": section}]}]
+        dr["category"] = [_category(obr, ctx)]
         dr["code"] = code
         dr["subject"] = patient_ref
         if encounter:
@@ -123,6 +122,20 @@ def convert_result_message(msg: Message, ctx: Ctx) -> None:
             ctx.warn("a second OBR for the same order in one message; only the first report is used", obr.loc())
             continue
         ctx.tx.upsert(dr, key, also=idents)
+
+
+def _category(obr: Segment, ctx: Ctx) -> dict:
+    """OBR-24 -> DiagnosticReport.category (v2-0074). Only real table 0074 codes go into the coding; anything
+    else (a DICOM modality such as MR, or a local code) becomes RAD with the sent value kept as text."""
+    sent = obr.get(24) or ""
+    section = sent.upper()
+    code = section if section in T.SERVICE_SECTION_0074 and section not in T.DICOM_NOT_0074 else "RAD"
+    category: dict = {"coding": [{"system": T.V2 + "0074", "code": code}]}
+    if section and code != section:
+        category["text"] = sent
+        if section not in T.DICOM_NOT_0074:
+            ctx.warn(f"OBR-24 {sent!r} is not in table 0074; category RAD", obr.loc(24))
+    return category
 
 
 def _imaging_study(g, obr: Segment, idents: list[dict], patient_ref: dict, encounter: dict | None, sr_url: str, ctx: Ctx) -> dict | None:
