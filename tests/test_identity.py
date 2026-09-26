@@ -10,6 +10,7 @@ from mock_fhir import MockFhirServer
 from mock_fhir.server import FhirStore
 from tests.conftest import FIXED_NOW as NOW
 from tests.conftest import ROOT
+from tools import ris_sim as r
 from v2fhir.bridge import Bridge
 from v2fhir.config import load_config
 from v2fhir.convert import convert
@@ -213,3 +214,59 @@ def test_unqualified_provider_id_across_messages_is_at_least_reported():
             assert warned
     finally:
         srv.stop()
+
+
+# ---- chained and repeated merges ------------------------------------------------------------------------
+O1 = dict(placer="ORD1001", filler="FIL5001", accession="ACC2001", procedure=r.CT_CHEST, modality="CT")
+
+
+@pytest.fixture
+def server_cfg(cfg, mock_server, tmp_path):
+    cfg.fhir_base_url, cfg.out_dir, cfg.fhir_retries = mock_server.base_url, str(tmp_path / "bundles"), 0
+    return cfg
+
+
+def a40(control: str, survivor: str, retired: str) -> str:
+    return (f"MSH|^~\\&|RIS_SIM|SYNTH_HOSP|V2FHIR|BRIDGE|20260917100000-0500||ADT^A40^ADT_A39|{control}|P|2.5.1\r"
+            "EVN|A40|20260917100000-0500\r"
+            f"PID|1||{survivor}^^^SYNTH_HOSP^MR||DOE^JANE||19680412|M\r"
+            f"MRG|{retired}^^^SYNTH_HOSP^MR||||||DOE^JANE\r")
+
+
+def with_mrn(message: str, mrn: str) -> str:
+    return message.replace(r.PATIENT["ids"], f"{mrn}^^^SYNTH_HOSP^MR")
+
+
+def test_order_on_a_patient_merged_twice_takes_the_final_survivors_report(server_cfg, mock_server):
+    """Order placed on MRN A; A40 A->B; later A40 B->C. The report carries C. The patient check followed only one
+    link, from the order's side, so this was AE."""
+    bridge = Bridge(server_cfg, clock=lambda: NOW)
+    assert bridge.handle(with_mrn(r.orm("NW", "O1", **O1), "SYNA").encode()).ack_code == "AA"
+    assert bridge.handle(a40("M1", "SYNB", "SYNA").encode()).ack_code == "AA"
+    assert bridge.handle(a40("M2", "SYNC", "SYNB").encode()).ack_code == "AA"
+    res = bridge.handle(with_mrn(r.oru("F", "R1", **O1, findings=["a"], impression="IMPRESSION: ok"), "SYNC").encode())
+    bridge.close()
+    assert res.ack_code == "AA", [str(i) for i in res.issues]
+
+
+def test_second_a40_into_the_same_survivor_keeps_the_first_merge_link(server_cfg, mock_server):
+    """A40 A->C then A40 B->C. The second A40's PUT of C carried only the new link and erased 'replaces A'."""
+    bridge = Bridge(server_cfg, clock=lambda: NOW)
+    assert bridge.handle(a40("M1", "SYNC", "SYNA").encode()).ack_code == "AA"
+    assert bridge.handle(a40("M2", "SYNC", "SYNB").encode()).ack_code == "AA"
+    bridge.close()
+    store = mock_server.store
+    a, b, c = (_patient(store, m)["id"] for m in ("SYNA", "SYNB", "SYNC"))
+    links = {ln["other"]["reference"] for ln in _patient(store, "SYNC").get("link", [])}
+    assert links == {f"Patient/{a}", f"Patient/{b}"}, links
+
+
+def test_report_under_an_old_mrn_after_two_merges_into_the_orders_patient(server_cfg, mock_server):
+    """Order on survivor C; the report still carries retired MRN A. After a second merge into C it used to be AE."""
+    bridge = Bridge(server_cfg, clock=lambda: NOW)
+    assert bridge.handle(a40("M1", "SYNC", "SYNA").encode()).ack_code == "AA"
+    assert bridge.handle(a40("M2", "SYNC", "SYNB").encode()).ack_code == "AA"
+    assert bridge.handle(with_mrn(r.orm("NW", "O1", **O1), "SYNC").encode()).ack_code == "AA"
+    res = bridge.handle(with_mrn(r.oru("F", "R1", **O1, findings=["a"], impression="IMPRESSION: ok"), "SYNA").encode())
+    bridge.close()
+    assert res.ack_code == "AA", [str(i) for i in res.issues]
