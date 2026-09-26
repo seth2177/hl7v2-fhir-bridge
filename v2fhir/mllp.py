@@ -26,6 +26,11 @@ from dataclasses import dataclass
 
 log = logging.getLogger("v2fhir.mllp")
 
+# The selector loop everywhere. It is already the default on Linux and macOS; on Windows the default Proactor
+# loop closes the listening socket for good when one client resets during accept (a load-balancer probe, a
+# sender that timed out), so one bad connection would stop the listener.
+loop_factory = asyncio.SelectorEventLoop
+
 VT, FS, CR = b"\x0b", b"\x1c", b"\x0d"
 END = FS + CR
 
@@ -250,7 +255,7 @@ class ServerThread:
 
     def __init__(self, server: MLLPServer):
         self.server = server
-        self.loop = asyncio.new_event_loop()
+        self.loop = loop_factory()
         self._thread = threading.Thread(target=self._run, daemon=True, name="mllp")
         self._ready = threading.Event()
         self._error: BaseException | None = None
