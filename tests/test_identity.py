@@ -147,3 +147,69 @@ def test_late_adt_for_the_merged_away_mrn_does_not_reactivate_it(merged):
     retired = _patient(store, "SYN100999")
     assert retired["active"] is False and {"other": {"reference": f"Patient/{survivor_id}"}, "type": "replaced-by"} in retired["link"]
     assert res.ack_code == "AA" and any("merged into" in str(i) for i in res.issues)
+
+
+# ---- provider ids without an assigning authority ------------------------------------------------------------
+def _seg(name: str, fields: dict[int, str]) -> str:
+    return name + "|" + "|".join(fields.get(i, "") for i in range(1, max(fields) + 1)) + "\r"
+
+
+def _head(kind: str, control: str, app: str) -> str:
+    return (f"MSH|^~\\&|{app}|SYNTH_HOSP|V2FHIR|BRIDGE|20260915120000-0500||{kind}|{control}|P|2.5.1\r"
+            "PID|1||SYN1^^^SYNTH_HOSP^MR||DOE^JANE||19700101|F\r")
+
+
+def _orm() -> str:   # from the RIS: ordering provider 1234 in the RIS's numbering
+    return (_head("ORM^O01^ORM_O01", "O1", "RIS")
+            + _seg("ORC", {1: "NW", 2: "ORD1^SYNTH_HIS", 3: "FIL1^SYNTH_RIS", 5: "SC", 12: "1234^SMITH^JOHN"})
+            + _seg("OBR", {1: "1", 2: "ORD1^SYNTH_HIS", 3: "FIL1^SYNTH_RIS", 4: "71250^CT CHEST^C4", 18: "ACC1", 24: "CT"}))
+
+
+def _oru(orc12: str | None) -> str:   # from the reporting system: radiologist 1234 in ITS numbering
+    orc = {1: "RE", 2: "ORD1^SYNTH_HIS", 3: "FIL1^SYNTH_RIS", 5: "CM"}
+    if orc12:
+        orc[12] = orc12          # the ordering provider echoed from the RIS order
+    return (_head("ORU^R01^ORU_R01", "R1", "REPORTING")
+            + _seg("ORC", orc)
+            + _seg("OBR", {1: "1", 2: "ORD1^SYNTH_HIS", 3: "FIL1^SYNTH_RIS", 4: "71250^CT CHEST^C4", 7: "20260915101200-0500",
+                          18: "ACC1", 22: "20260915120000-0500", 24: "CT", 25: "F", 32: "1234&JONES&MARY"})
+            + "OBX|1|TX|&IMP^Impression|1|IMPRESSION: normal.||||||F\r")
+
+
+def _cfg(**over):
+    return load_config(ROOT / "config" / "bridge.toml", {"out_dir": "", "fhir_base_url": "", **over})
+
+
+def test_interpreter_reference_never_resolves_to_a_differently_named_provider_in_one_bundle():
+    conv = convert(parse(_oru("1234^SMITH^JOHN")), _cfg(), NOW)
+    entries = {e["fullUrl"]: e["resource"] for e in conv.bundle["entry"]}
+    dr = next(r for r in entries.values() if r["resourceType"] == "DiagnosticReport")
+    interp = dr["resultsInterpreter"][0]
+    warned = any("1234" in w.text for w in conv.warnings)
+    if "reference" in interp:
+        target = entries[interp["reference"]]
+        assert target["name"][0]["family"] == "JONES", (
+            f"resultsInterpreter display {interp.get('display')!r} but its reference resolves to {target['name'][0]} "
+            f"(warned={warned})")
+    else:
+        assert warned, "display-only interpreter without telling anyone why"
+
+
+def test_unqualified_provider_id_across_messages_is_at_least_reported():
+    srv = MockFhirServer().start()
+    try:
+        bridge = Bridge(_cfg(fhir_base_url=srv.base_url, fhir_retries=0), clock=lambda: NOW)
+        assert bridge.handle(_orm().encode()).ack_code == "AA"
+        res = bridge.handle(_oru(None).encode())
+        bridge.close()
+        dr = srv.store.all("DiagnosticReport")[0]
+        interp = dr["resultsInterpreter"][0]
+        warned = any("1234" in i.text for i in res.issues)
+        if "reference" in interp:
+            who = srv.store.current("Practitioner", interp["reference"].split("/")[-1])
+            assert who["name"][0]["family"] == "JONES" or warned, (
+                f"signed report attributed to Practitioner {who['name'][0]} (ACK {res.ack_code}, no warning)")
+        else:
+            assert warned
+    finally:
+        srv.stop()

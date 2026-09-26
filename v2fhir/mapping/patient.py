@@ -120,6 +120,11 @@ def practitioner_ref(ident: dict | None, name: dict | None, ctx: Ctx) -> dict | 
         return None
     if not ident:
         return {"display": dt.name_text(name)}
+    earlier = ctx.tx.get("Practitioner", ident)
+    if earlier and name and earlier.get("name") and not _same_person(earlier["name"][0], name):
+        ctx.warn(f"provider id {ident['value']!r} names both {dt.name_text(earlier['name'][0])} and {dt.name_text(name)} in one message; "
+                 f"{dt.name_text(name)} kept as a display name only")
+        return {"display": dt.name_text(name)}
     res: dict = {"resourceType": "Practitioner", "meta": ctx.meta(), "identifier": [ident]}
     if name:
         res["name"] = [name]
@@ -128,6 +133,13 @@ def practitioner_ref(ident: dict | None, name: dict | None, ctx: Ctx) -> dict | 
     if name:
         ref["display"] = dt.name_text(name)
     return ref
+
+
+def _same_person(a: dict, b: dict) -> bool:
+    if (a.get("family") or "").casefold() != (b.get("family") or "").casefold():
+        return False
+    ga, gb = (a.get("given") or [""])[0].casefold(), (b.get("given") or [""])[0].casefold()
+    return not (ga and gb) or ga == gb
 
 
 def xcn_ref(seg: Segment, field: int, ctx: Ctx) -> dict | None:
