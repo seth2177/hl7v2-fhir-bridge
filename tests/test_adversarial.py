@@ -1,7 +1,7 @@
 """Attacking my own code.
 
 Regressions: the first four tests are problems the fuzzer or my review found; each one fails on the code
-before its fix. Then two robustness tests (ambiguous order numbers, search-special characters) and the
+before its fix. Then two tests for ambiguous order numbers and search-special characters, and the
 fuzzing itself, seeded so CI is repeatable."""
 import logging
 import os
