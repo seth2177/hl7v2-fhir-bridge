@@ -28,6 +28,16 @@ from .orders import order_groups, order_identifiers, service_request
 from .patient import add_encounter, add_patient, practitioner_ref
 
 UID_RX = re.compile(r"^[0-2](\.(0|[1-9][0-9]*))+$")
+FHIR_STRING_MAX_BYTES = 1024 * 1024          # a FHIR string is at most 1 MB; base64Binary (presentedForm) has no limit
+TRUNCATED = " [truncated; full report in presentedForm]"
+
+
+def _fit_string(s: str, limit: int = FHIR_STRING_MAX_BYTES) -> tuple[str, bool]:
+    raw = s.encode("utf-8")
+    if len(raw) <= limit:
+        return s, False
+    cut = limit - len(TRUNCATED.encode("utf-8"))
+    return raw[:cut].decode("utf-8", errors="ignore") + TRUNCATED, True
 
 
 def _obx_text(obx: Segment, msg: Message) -> str:
@@ -111,7 +121,9 @@ def convert_result_message(msg: Message, ctx: Ctx) -> None:
         if study_ref:
             dr["imagingStudy"] = [study_ref]
         if impression or text:
-            dr["conclusion"] = impression or text
+            dr["conclusion"], cut = _fit_string(impression or text)
+            if cut:
+                ctx.warn("report text is over FHIR's 1 MB string limit; conclusion truncated, full text in presentedForm", obr.loc())
         if coded:
             dr["conclusionCode"] = coded
         if text:
