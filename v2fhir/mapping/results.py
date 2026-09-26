@@ -88,7 +88,8 @@ def convert_result_message(msg: Message, ctx: Ctx) -> None:
                              tq1=None, ipc=None, dg1s=[], ntes=[], subject=patient_ref, encounter=encounter)
         sr_url = ctx.tx.create_if_absent(sr, key, also=idents)
 
-        study_ref = _imaging_study(g, obr, idents, patient_ref, encounter, sr_url, ctx)
+        performed = rs in T.RESULT_STATUS_EXAM_PERFORMED        # O, I, S, X: no images exist yet (or ever)
+        study_ref = _imaging_study(g, obr, idents, patient_ref, encounter, sr_url, ctx) if performed else None
 
         text, impression, coded = report_text(g.get("OBX", []), ctx)
         dr: dict = {"resourceType": "DiagnosticReport", "meta": ctx.meta(), "identifier": copy.deepcopy(idents),

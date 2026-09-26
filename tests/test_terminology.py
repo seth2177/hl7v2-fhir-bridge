@@ -102,3 +102,16 @@ def test_unknown_telecom_codes_are_not_guessed():
 def test_empty_use_and_net_still_take_the_field_default():
     assert _xtn("^^PH^^^555^1234567")["use"] == "home"
     assert _xtn("^NET^Internet^a@example.org") == {"system": "email", "value": "a@example.org", "use": "home"}
+
+
+# ---- ImagingStudy only for a performed exam ------------------------------------------------------------
+@pytest.mark.parametrize("obr25", ["X", "S", "O", "I"])
+def test_no_imaging_study_when_the_exam_was_not_performed(cfg, obr25):
+    """R4 ImagingStudy available = "at least one instance has been associated"; 0123 X/S/O/I say no images exist."""
+    b = to_bundle(_oru(**{"|CT|F|": f"|CT|{obr25}|"}), cfg)
+    assert resources(b, "ImagingStudy") == [] and "imagingStudy" not in resources(b, "DiagnosticReport")[0]
+
+
+@pytest.mark.parametrize("obr25", ["P", "F", "C"])
+def test_imaging_study_for_a_performed_exam(cfg, obr25):
+    assert resources(to_bundle(_oru(**{"|CT|F|": f"|CT|{obr25}|"}), cfg), "ImagingStudy")[0]["status"] == "available"
