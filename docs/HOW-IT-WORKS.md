@@ -28,7 +28,7 @@ If you know v2, most of FHIR is familiar. It is a different packaging with stron
 | a table value (0001: M/F) | a `code` from a code system (AdministrativeGender: male/female) |
 | MSH-10 control id | nothing built in: this bridge writes a **Provenance** per message and `meta.source` on every resource |
 | ACK AA/AE/AR | HTTP status of the transaction (200 with a per-entry result, or 4xx/5xx for the whole thing) |
-| a batch where each message stands alone | a **transaction** Bundle: every entry succeeds or none do |
+| a v2 batch (FHS/BHS; each message stands alone) | a FHIR **batch** Bundle (each entry processed on its own). This bridge sends one message as one **transaction** Bundle instead: every entry succeeds or none do |
 
 The two things that matter most for an interface:
 
@@ -51,7 +51,8 @@ before sending the next message.
 one frame with its `0x0D` in the next read. It returns complete frames. Bytes outside a frame (keep-alives,
 line noise) are counted and dropped. A new `0x0B` before the end abandons the partial frame. A frame over
 `max_message_bytes` keeps only its first 4 KB, enough to NAK with the right MSA-2, so memory stays bounded.
-The search resumes where it stopped, so a 50 MB report arriving in 64 KB reads isn't O(n²).
+The search resumes where it stopped, and never looks past the next `0x0B`, so a 10 MB report (the default
+`max_message_bytes`) arriving in 64 KB reads, or a flood of `0x0B` bytes, isn't O(n²).
 
 **The listener.** One asyncio task per connection, on the selector event loop on every OS (on Windows the
 default Proactor loop closes the listening socket when a single client resets during accept). Messages on a
@@ -80,8 +81,9 @@ left inside report text), not a new segment. Values stay escaped until read, so 
 field. The two-character value `""` (HL7 "delete this") is distinguished from an empty field.
 
 **Field reality.** Everything the parser refuses (no MSH, a garbage segment id, a second MSH, a missing MSH-9,
-MSH-10 or MSH-12) becomes an **AR** with an ERR segment. The ERR never echoes the garbage itself, which was one
-of the fuzzing findings.
+MSH-10 or MSH-12) becomes an **AR** with an ERR segment. The garbage is never used as the ERR-2 location (a bad segment id there
+split the ERR segment, one of the fuzzing findings); ERR-8 and MSA-3 quote a few characters of it, escaped with
+the sender's delimiters and stripped of control characters.
 
 ## Hop 3: have we seen it? (`v2fhir/bridge.py`)
 
@@ -144,7 +146,7 @@ AR and AE both mean "keep it". AR is for problems that have nothing to do with t
 safe because every request is conditional and orders and reports are checked before writing. The ACK uses the sender's own
 delimiters, echoes MSH-11/12/18, and puts warnings in ERR segments with severity W, but only for v2.5+, where
 ERR-4 exists. A v2.3 receiver would read any ERR as a failure. Control characters from the inbound message
-are never echoed: a stray `0x1C` in an ACK ends the sender's MLLP frame early.
+are never echoed: a stray `0x0B` or `0x1C` in an ACK breaks the sender's MLLP framing.
 
 ---
 
