@@ -17,7 +17,8 @@ class Config:
     host: str = "127.0.0.1"
     port: int = 2575
     max_message_bytes: int = 10 * 1024 * 1024
-    idle_timeout_seconds: float = 300.0
+    idle_timeout_seconds: float = 300.0          # reads and ACK writes
+    max_connections: int = 128                   # at the limit the quietest idle connection is dropped
 
     # hl7
     accepted_versions: tuple[str, ...] = ("2.3", "2.3.1", "2.4", "2.5", "2.5.1")

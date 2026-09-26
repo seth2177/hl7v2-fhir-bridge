@@ -56,7 +56,8 @@ The search resumes where it stopped, so a 50 MB report arriving in 64 KB reads i
 **The listener.** One asyncio task per connection, on the selector event loop on every OS: on Windows the default
 Proactor loop closes the listening socket when a single client resets during accept. Messages on a connection are handled one at a time, in
 order: HL7 ordering matters (an A08 must not overtake its A04). Each message runs on a worker thread, so a
-slow FHIR server never stalls the other connections. Nothing a message or a connection does can stop the
+slow FHIR server never stalls the other connections. A peer that goes quiet, stops reading its ACKs, or
+joins a crowd of silent connections is dropped (idle timeout, `max_connections`). Nothing a message or a connection does can stop the
 listener: `tests/test_adversarial.py` throws random bytes, truncated frames, oversize frames and hang-ups at it
 from four threads, then checks that it still ACKs a good message.
 
