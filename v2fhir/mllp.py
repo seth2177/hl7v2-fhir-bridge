@@ -187,7 +187,11 @@ class MLLPServer:
 
     def _forget(self, t: asyncio.Task) -> None:
         self._tasks.discard(t)
-        self._conns.pop(t, None)
+        conn = self._conns.pop(t, None)
+        if conn is not None:
+            # A task cancelled before its first step (close() right after an accept) never reaches _client's
+            # finally, so its socket would stay open and wait_closed() would sit out its full timeout.
+            conn.writer.close()
 
     def _evict_one(self, newcomer) -> bool:
         """At the connection limit, drop the connection that has been quiet longest and isn't handling a message
