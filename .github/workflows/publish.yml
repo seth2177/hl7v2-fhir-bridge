@@ -2,10 +2,15 @@ name: Publish to PyPI
 
 # Trusted Publishing: PyPI trusts this workflow's OIDC token. No API tokens or secrets are stored anywhere.
 # One-time setup on PyPI: pending publisher for this repo, workflow publish.yml, environment pypi.
+#
+# Release by pushing an annotated tag that equals the package version:
+#   git tag -a v1.2.3 -m "release notes"  &&  git push origin v1.2.3
+# The GitHub Release is created after PyPI accepts the upload, with the tag message as its notes.
+# Creating the release in the GitHub UI also works: its new tag triggers this workflow.
 
 on:
-  release:
-    types: [published]
+  push:
+    tags: ["v*"]
 
 jobs:
   build:
@@ -24,7 +29,7 @@ jobs:
         run: |
           version=$(python -c "import glob, re; print(re.match(r'dist/[^-]+-([^-]+)-', glob.glob('dist/*.whl')[0]).group(1))")
           if [ "v$version" != "$GITHUB_REF_NAME" ]; then
-            echo "::error::release tag $GITHUB_REF_NAME does not match package version $version"
+            echo "::error::tag $GITHUB_REF_NAME does not match package version $version"
             exit 1
           fi
       - uses: actions/upload-artifact@v7
@@ -44,3 +49,26 @@ jobs:
           name: dist
           path: dist/
       - uses: pypa/gh-action-pypi-publish@release/v1
+
+  github-release:
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist/
+      - name: Create the GitHub Release (skipped if one already exists for this tag)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo "release $GITHUB_REF_NAME already exists"
+            exit 0
+          fi
+          git fetch --force origin "refs/tags/$GITHUB_REF_NAME:refs/tags/$GITHUB_REF_NAME"
+          git tag -l --format='%(contents)' "$GITHUB_REF_NAME" > notes.md
+          gh release create "$GITHUB_REF_NAME" dist/* --title "$GITHUB_REF_NAME" --notes-file notes.md --verify-tag
