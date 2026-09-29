@@ -10,8 +10,8 @@ import uuid
 import httpx
 import pytest
 
-from tools import ris_sim as r
 from v2fhir.bridge import Bridge
+from v2fhir.tools import ris_sim as r
 
 HAPI_URL = os.environ.get("HAPI_URL")
 pytestmark = pytest.mark.skipif(not HAPI_URL, reason="set HAPI_URL to run against a real FHIR server")

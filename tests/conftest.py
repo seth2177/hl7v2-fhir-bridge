@@ -5,11 +5,11 @@ from pathlib import Path
 
 import pytest
 
-from mock_fhir import MockFhirServer
 from v2fhir.bridge import Bridge
 from v2fhir.config import load_config
 from v2fhir.convert import convert
 from v2fhir.hl7.parser import parse, parse_bytes
+from v2fhir.mock_fhir import MockFhirServer
 from v2fhir.validate import validate_bundle
 
 ROOT = Path(__file__).resolve().parent.parent

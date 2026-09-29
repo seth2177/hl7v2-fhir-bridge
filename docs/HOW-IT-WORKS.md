@@ -42,7 +42,7 @@ The two things that matter most for an interface:
 
 ---
 
-## Hop 1: the RIS sends an ORM over MLLP (`tools/ris_sim.py`, `v2fhir/mllp.py`)
+## Hop 1: the RIS sends an ORM over MLLP (`v2fhir/tools/ris_sim.py`, `v2fhir/mllp.py`)
 
 **What happens.** The RIS connects to port 2575 and sends `0x0B` + message + `0x1C 0x0D`, then waits for an ACK
 before sending the next message.

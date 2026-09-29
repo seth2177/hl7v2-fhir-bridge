@@ -12,9 +12,9 @@ from pathlib import Path
 import pytest
 
 import v2fhir
-from tools import ris_sim as r
 from v2fhir.bridge import Bridge
 from v2fhir.mllp import FrameDecoder, MLLPClient, MLLPServer, ServerThread, bridge_handler, frame
+from v2fhir.tools import ris_sim as r
 
 A = b"MSH|^~\\&|A|B|C|D|2026||ADT^A04|1|P|2.5\r"
 B = b"MSH|^~\\&|A|B|C|D|2026||ADT^A04|2|P|2.5\r"

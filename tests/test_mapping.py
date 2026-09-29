@@ -6,11 +6,11 @@ import re
 import pytest
 
 from tests.conftest import SAMPLES, entry, resources, sample_bytes, to_bundle
-from tools import ris_sim as r
 from v2fhir.convert import UnsupportedMessage, convert
 from v2fhir.errors import MappingError
 from v2fhir.hl7.parser import parse, parse_bytes
 from v2fhir.mapping.provenance import Z_SEGMENT_EXTENSION
+from v2fhir.tools import ris_sim as r
 
 O1 = dict(placer="ORD1001", filler="FIL5001", accession="ACC2001", procedure=r.CT_CHEST, modality="CT")
 
