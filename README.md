@@ -1,6 +1,6 @@
 # hl7v2-fhir-bridge
 
-[![CI](https://github.com/seth2177/hl7v2-fhir-bridge/actions/workflows/ci.yml/badge.svg)](https://github.com/seth2177/hl7v2-fhir-bridge/actions/workflows/ci.yml)
+[![CI](https://github.com/seth2177/hl7v2-fhir-bridge/actions/workflows/ci.yml/badge.svg)](https://github.com/seth2177/hl7v2-fhir-bridge/actions/workflows/ci.yml) [![PyPI](https://img.shields.io/pypi/v/hl7v2-fhir-bridge)](https://pypi.org/project/hl7v2-fhir-bridge/)
 
 **Turn a radiology department's HL7 v2 feed into FHIR R4 without duplicating a patient, losing an order, or un-signing a report.**
 
@@ -31,6 +31,13 @@ Requires Python 3.11+.
 git clone https://github.com/seth2177/hl7v2-fhir-bridge && cd hl7v2-fhir-bridge
 python -m pip install -r requirements.txt        # Windows: py -3.12 -m pip install -r requirements.txt
 python run_demo.py                               # Windows: py -3.12 run_demo.py
+```
+
+Or install it from PyPI and run the same demo from any folder:
+
+```bash
+pip install hl7v2-fhir-bridge
+hl7v2-fhir-bridge demo
 ```
 
 That one command starts a mock FHIR server and the MLLP listener. A simulated RIS and reporting system then
