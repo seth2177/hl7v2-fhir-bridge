@@ -7,14 +7,23 @@ name: Publish to PyPI
 #   git tag -a v1.2.3 -m "release notes"  &&  git push origin v1.2.3
 # The GitHub Release is created after PyPI accepts the upload, with the tag message as its notes.
 # Creating the release in the GitHub UI also works: its new tag triggers this workflow.
+# Or run it by hand from main (Actions -> Publish to PyPI -> Run workflow): it releases the version in the
+# package, and creates the v<version> tag and the GitHub Release with the notes given.
 
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      notes:
+        description: Release notes
+        required: true
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -25,13 +34,19 @@ jobs:
           python -m pip install build twine
           python -m build
           python -m twine check dist/*
-      - name: Tag must equal package version
+      - name: Tag must equal package version (manual runs release main only)
+        id: version
         run: |
           version=$(python -c "import glob, re; print(re.match(r'dist/[^-]+-([^-]+)-', glob.glob('dist/*.whl')[0]).group(1))")
-          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+          if [ "$GITHUB_EVENT_NAME" = "push" ] && [ "v$version" != "$GITHUB_REF_NAME" ]; then
             echo "::error::tag $GITHUB_REF_NAME does not match package version $version"
             exit 1
           fi
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error::run this workflow from main"
+            exit 1
+          fi
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@v7
         with:
           name: dist
@@ -51,7 +66,7 @@ jobs:
       - uses: pypa/gh-action-pypi-publish@release/v1
 
   github-release:
-    needs: publish
+    needs: [build, publish]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -64,11 +79,18 @@ jobs:
       - name: Create the GitHub Release (skipped if one already exists for this tag)
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.build.outputs.tag }}
+          NOTES: ${{ inputs.notes }}
         run: |
-          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            echo "release $GITHUB_REF_NAME already exists"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "release $TAG already exists"
             exit 0
           fi
-          git fetch --force origin "refs/tags/$GITHUB_REF_NAME:refs/tags/$GITHUB_REF_NAME"
-          git tag -l --format='%(contents)' "$GITHUB_REF_NAME" > notes.md
-          gh release create "$GITHUB_REF_NAME" dist/* --title "$GITHUB_REF_NAME" --notes-file notes.md --verify-tag
+          if [ "$GITHUB_EVENT_NAME" = "push" ]; then
+            git fetch --force origin "refs/tags/$TAG:refs/tags/$TAG"
+            git tag -l --format='%(contents)' "$TAG" > notes.md
+            gh release create "$TAG" dist/* --title "$TAG" --notes-file notes.md --verify-tag
+          else
+            printf '%s\n' "$NOTES" > notes.md
+            gh release create "$TAG" dist/* --title "$TAG" --notes-file notes.md --target "$GITHUB_SHA"
+          fi
