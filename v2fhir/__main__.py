@@ -1,5 +1,8 @@
 """Command line.
 
+Installed from PyPI, `hl7v2-fhir-bridge` is the same command as `python -m v2fhir`.
+
+  python -m v2fhir demo                                   the whole workflow, synthetic traffic (= python run_demo.py)
   python -m v2fhir convert samples/oru_r01_final.hl7       print the FHIR transaction Bundle (JSON)
   python -m v2fhir serve --fhir-url http://localhost:8080/fhir   run the MLLP listener
   python -m v2fhir send samples/orm_o01_new.hl7 --port 2575      send a file over MLLP, print the ACK
@@ -15,18 +18,16 @@ from datetime import datetime
 from pathlib import Path
 
 from .bridge import Bridge
-from .config import load_config
+from .config import default_config_path, load_config
 from .convert import convert
 from .errors import HL7Error
 from .hl7.parser import parse_bytes, split_batch_bytes
 from .mllp import MLLPClient, MLLPServer, bridge_handler, loop_factory
 from .validate import BundleInvalid, validate_bundle
 
-DEFAULT_CONFIG = Path(__file__).resolve().parent.parent / "config" / "bridge.toml"
-
 
 def _config(path: str | None, **overrides):
-    p = path or (DEFAULT_CONFIG if DEFAULT_CONFIG.exists() else None)
+    p = path or default_config_path()
     return load_config(p, {k: v for k, v in overrides.items() if v is not None})
 
 
@@ -78,8 +79,14 @@ def cmd_send(a) -> int:
 
 
 def main(argv=None) -> int:
+    argv = sys.argv[1:] if argv is None else list(argv)
+    if argv[:1] == ["demo"]:
+        from .demo import main as demo
+        demo(argv[1:])
+        return 0
     ap = argparse.ArgumentParser(prog="python -m v2fhir")
     sub = ap.add_subparsers(dest="cmd", required=True)
+    sub.add_parser("demo", help="the whole workflow over MLLP with synthetic traffic (see demo --help)")
     c = sub.add_parser("convert", help="convert an HL7 v2 file to a FHIR transaction Bundle (stdout)")
     c.add_argument("file")
     c.add_argument("--config")

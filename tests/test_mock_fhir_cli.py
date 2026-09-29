@@ -6,10 +6,10 @@ import httpx
 import pytest
 
 import run_demo
-from mock_fhir.server import FhirStore, TxError
 from tests.conftest import SAMPLES
 from v2fhir.__main__ import main as cli
 from v2fhir.mapping.bundle import token
+from v2fhir.mock_fhir.server import FhirStore, TxError
 
 
 def tx(*entries):
