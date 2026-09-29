@@ -74,7 +74,7 @@ python -m v2fhir convert samples/oru_r01_final.hl7      # one message -> the FHI
 python -m pip install -r requirements-dev.txt && python -m pytest -q
                                                         # parser, escapes, charsets, every mapping, MLLP over TCP,
                                                         # ACK content, idempotency, validation, fuzzing
-python -m mock_fhir --port 8080                         # terminal 1: the mock FHIR server
+python -m v2fhir.mock_fhir --port 8080                  # terminal 1: the mock FHIR server
 python -m v2fhir serve --fhir-url http://127.0.0.1:8080/fhir   # terminal 2: the listener on :2575
 python -m v2fhir send samples/omi_o23_new_stat.hl7      # terminal 3: send a file, print the ACK
 ```
@@ -106,7 +106,7 @@ an update and a match, so the demo shows `=` where the mock shows `~`.
 | Partial-precision timestamps (`2026`, `2026091514`, `202609151430`) | a date keeps its precision; a time is zero-filled to hh:mm:ss, because FHIR has no hour- or minute-only time; an instant without a time is omitted | `mapping/datatypes.py` |
 | Non-ASCII names (José Núñez), MSH-18 | declared charsets are decoded strictly: bytes that aren't valid in the declared set, or UTF-8 bytes under a single-byte declaration such as 8859/1, are AE, not a mangled name; undeclared: UTF-8, then cp1252 with a warning | `hl7/charset.py` |
 | `\r\n` or `\n` instead of `\r`; a bare LF inside report text | all three terminators accepted; a bare LF in a CR message is data, not a segment | `hl7/parser.py` |
-| Empty fields, trailing separators, `""` explicit nulls, padded values | trailing separators harmless; values stripped. An ADT is applied as a snapshot, so an empty PID field removes the element just as `""` does (documented deviation, [MAPPING §6](docs/MAPPING.md)) | `hl7/parser.py`, `mapping/patient.py` |
+| Empty fields, trailing separators, `""` explicit nulls, padded values | trailing separators harmless; values stripped. An ADT is applied as a snapshot, so an empty PID field removes the element just as `""` does (documented deviation, [MAPPING §6](https://github.com/seth2177/hl7v2-fhir-bridge/blob/main/docs/MAPPING.md)) | `hl7/parser.py`, `mapping/patient.py` |
 | Escapes and formatted text (`\F\ \S\ \.br\ \H\ \Xhh\`); unescaped `^` in report text | escape handling per v2.5.1 2.7 (formatting commands mapped to line breaks and spaces, with caps); report text read whole, so a stray `^` survives | `hl7/escape.py`, `mapping/results.py` |
 | Z-segments (and OMI's IPC) | kept verbatim on the message's Provenance; ZDS-1 becomes the ImagingStudy UID (IHE convention) | `mapping/provenance.py` |
 | Malformed message | AR with ERR (location and HL7 0357 code); MSA-2 recovered even when the message does not parse | `hl7/ack.py` |
@@ -119,8 +119,8 @@ an update and a match, so the demo shows `=` where the mock shows `~`.
 | MSH-10 used in a file name | sanitised: `../../etc/passwd` is data | `sink.py` |
 | "Which message wrote this?" | `meta.source` on every version (the message that last created or replaced it) plus one Provenance per message (what it asserted, MSH-10, sender, Z-segments) | `mapping/provenance.py` |
 
-**Every field and code mapping:** [docs/MAPPING.md](docs/MAPPING.md) ·
-**One order and its report, hop by hop (with a FHIR primer for v2 people):** [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md)
+**Every field and code mapping:** [docs/MAPPING.md](https://github.com/seth2177/hl7v2-fhir-bridge/blob/main/docs/MAPPING.md) ·
+**One order and its report, hop by hop (with a FHIR primer for v2 people):** [docs/HOW-IT-WORKS.md](https://github.com/seth2177/hl7v2-fhir-bridge/blob/main/docs/HOW-IT-WORKS.md)
 
 ## Layout
 
@@ -132,8 +132,8 @@ v2fhir/          the bridge
   bridge.py      parse -> dedupe -> map -> validate -> sink -> ACK; never raises
   validate.py    fhir.resources, required bindings, and the invariants the mapper could break
   sink.py        bundle directory and FHIR transaction POST (httpx)
-mock_fhir/       in-memory FHIR server that executes transactions (conditional create/update/patch, OR search)
-tools/ris_sim.py synthetic RIS and reporting system
+  mock_fhir/     in-memory FHIR server that executes transactions (conditional create/update/patch, OR search)
+  tools/         ris_sim.py: synthetic RIS and reporting system
 samples/         synthetic messages: ADT A04/A08/A40, ORM NW/SC/CA, OMI^O23, ORU (TX and FT), a v2.3 Latin-1 feed
 config/          bridge.toml: MRN authority, identifier systems, time zone, limits
 tests/           unit, TCP, end to end, fuzzing

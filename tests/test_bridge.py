@@ -6,9 +6,9 @@ import httpx
 import pytest
 
 from tests.conftest import FIXED_NOW
-from tools import ris_sim as r
 from v2fhir.bridge import Bridge
 from v2fhir.sink import FhirSink
+from v2fhir.tools import ris_sim as r
 
 O1 = dict(placer="ORD1001", filler="FIL5001", accession="ACC2001", procedure=r.CT_CHEST, modality="CT")
 O2 = dict(placer="ORD1002", filler="FIL5002", accession="ACC2002", procedure=r.MR_BRAIN, modality="NMR")

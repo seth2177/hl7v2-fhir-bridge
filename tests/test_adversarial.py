@@ -12,13 +12,13 @@ import threading
 import pytest
 
 from tests.conftest import SAMPLES, to_bundle
-from tools import ris_sim as r
 from v2fhir.bridge import Bridge
 from v2fhir.convert import convert
 from v2fhir.errors import HL7Error
 from v2fhir.hl7.ack import head_fields
 from v2fhir.hl7.parser import parse_bytes
 from v2fhir.mllp import FrameDecoder, MLLPClient, MLLPServer, ServerThread, bridge_handler, frame
+from v2fhir.tools import ris_sim as r
 from v2fhir.validate import validate_bundle
 
 O1 = dict(placer="ORD1001", filler="FIL5001", accession="ACC2001", procedure=r.CT_CHEST, modality="CT")

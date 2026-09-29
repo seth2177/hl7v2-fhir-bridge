@@ -1,10 +1,60 @@
+[build-system]
+requires = ["hatchling>=1.26"]
+build-backend = "hatchling.build"
+
 [project]
 name = "hl7v2-fhir-bridge"
-version = "0.1.0"
+dynamic = ["version"]
 description = "HL7 v2 (ADT, ORM/OMI, ORU) over MLLP to FHIR R4 transaction bundles for radiology workflow: table-driven, idempotent, provenance-traced."
+readme = "README.md"
 requires-python = ">=3.11"
-license = { text = "MIT" }
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [{ name = "Seth Turnbo" }]
+keywords = ["hl7", "fhir", "mllp", "radiology", "interoperability"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Healthcare Industry",
+  "Topic :: Scientific/Engineering :: Medical Science Apps.",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Operating System :: OS Independent",
+]
+dependencies = [
+  "fhir.resources==8.3.0",
+  "httpx>=0.27",
+  "tzdata>=2024.1",
+]
+
+[project.urls]
+Homepage = "https://github.com/seth2177/hl7v2-fhir-bridge"
+Repository = "https://github.com/seth2177/hl7v2-fhir-bridge"
+Issues = "https://github.com/seth2177/hl7v2-fhir-bridge/issues"
+
+[project.scripts]
+hl7v2-fhir-bridge = "v2fhir.__main__:main"
+
+[tool.hatch.version]
+path = "v2fhir/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["v2fhir"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"config/bridge.toml" = "v2fhir/_data/bridge.toml"
+
+[tool.hatch.build.targets.sdist]
+include = [
+  "/v2fhir",
+  "/config",
+  "/samples",
+  "/run_demo.py",
+  "/requirements*.txt",
+  "/README.md",
+  "/LICENSE",
+]
+exclude = ["_LOCAL_ONLY*", "**/_LOCAL_ONLY*", "**/__pycache__"]
 
 [tool.ruff]
 line-length = 160

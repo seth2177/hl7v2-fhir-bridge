@@ -8,9 +8,9 @@ from datetime import timedelta
 import pytest
 
 from tests.conftest import FIXED_NOW, sample_bytes
-from tools import ris_sim as r
 from v2fhir.bridge import Bridge
 from v2fhir.sink import FhirError, FhirSink
+from v2fhir.tools import ris_sim as r
 
 O1 = dict(placer="ORD1001", filler="FIL5001", accession="ACC2001", procedure=r.CT_CHEST, modality="CT")
 

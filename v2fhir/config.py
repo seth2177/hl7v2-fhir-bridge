@@ -10,6 +10,14 @@ from dataclasses import dataclass, field, fields
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+# config/bridge.toml in a checkout, a copy inside the installed wheel.
+_DEFAULT_CONFIGS = (Path(__file__).resolve().parent.parent / "config" / "bridge.toml",
+                    Path(__file__).resolve().parent / "_data" / "bridge.toml")
+
+
+def default_config_path() -> Path | None:
+    return next((p for p in _DEFAULT_CONFIGS if p.is_file()), None)
+
 
 @dataclass
 class Config:

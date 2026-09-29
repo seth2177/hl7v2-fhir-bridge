@@ -1,4 +1,4 @@
-"""python -m mock_fhir [--port 8080]  -- run the mock FHIR server in the foreground."""
+"""python -m v2fhir.mock_fhir [--port 8080]  -- run the mock FHIR server in the foreground."""
 import argparse
 import time
 

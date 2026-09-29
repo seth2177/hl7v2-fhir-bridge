@@ -6,12 +6,12 @@ from datetime import datetime
 import pytest
 
 from tests.conftest import to_bundle
-from tools import ris_sim as r
 from v2fhir.bridge import Bridge
 from v2fhir.errors import Issue, Location
 from v2fhir.hl7 import ack
 from v2fhir.hl7.ack import build_ack, head_fields
 from v2fhir.hl7.parser import parse, split_batch_bytes
+from v2fhir.tools import ris_sim as r
 from v2fhir.validate import BundleInvalid, validate_bundle
 
 
